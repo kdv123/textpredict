@@ -25,8 +25,8 @@ class CausalByteLanguageModel(LanguageModel):
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
                  fp16: bool = False,
-                 mixed_case_context = False,
-                 case_simple = False,
+                 mixed_case_context: bool = False,
+                 case_simple: bool = False,
                  ):
         """
         Initialize instance variables and load the language model with given path
