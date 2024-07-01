@@ -1,8 +1,8 @@
 from typing import List, Tuple
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from bcipy.helpers.symbols import BACKSPACE_CHAR, SPACE_CHAR, alphabet
-from bcipy.language.main import LanguageModel, ResponseType
-from bcipy.helpers.exceptions import InvalidLanguageModelException
+from language_model import LanguageModel
+from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from exceptions import InvalidLanguageModelException
 import torch
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -13,7 +13,6 @@ class Seq2SeqLanguageModel(LanguageModel):
     """Transformer seq2seq models like the ByT5 byte-level pretrained model by Google."""
 
     def __init__(self,
-                 response_type: ResponseType,
                  symbol_set: List[str],
                  lang_model_name: str,
                  lm_path: str = None,
@@ -30,7 +29,7 @@ class Seq2SeqLanguageModel(LanguageModel):
             lm_device        - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context  - text to condition start of sentence on
         """
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
+        super().__init__(symbol_set=symbol_set)
         self.model = None
         self.tokenizer = None
         self.vocab_size = 0
@@ -53,9 +52,6 @@ class Seq2SeqLanguageModel(LanguageModel):
         self.model_dir = lm_path or lang_model_name
 
         self.load()
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """

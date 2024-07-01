@@ -1,19 +1,20 @@
-from typing import Optional, List, Tuple
-from bcipy.helpers.symbols import BACKSPACE_CHAR, SPACE_CHAR
-from bcipy.language.main import LanguageModel, ResponseType
-from bcipy.helpers.exceptions import InvalidLanguageModelException
+from typing import List, Tuple
 import json
-from bcipy.config import LM_PATH
+from language_model import LanguageModel
+from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from exceptions import InvalidLanguageModelException
 
 
 class UnigramLanguageModel(LanguageModel):
     """Character language model based on trained unigram weights"""
 
-    def __init__(self, response_type: ResponseType, symbol_set: List[str], lm_path: Optional[str] = None):
+    def __init__(self,
+                 symbol_set: List[str],
+                 lm_path: str):
 
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
+        super().__init__(symbol_set=symbol_set)
         self.model = None
-        self.lm_path = lm_path or f"{LM_PATH}/unigram.json"
+        self.lm_path = lm_path
 
         try:
             with open(self.lm_path) as json_file:
@@ -30,9 +31,6 @@ class UnigramLanguageModel(LanguageModel):
         self.unigram_lm = sorted(self.unigram_lm.items(), key=lambda item: item[1], reverse=True)
 
         self.load()
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """

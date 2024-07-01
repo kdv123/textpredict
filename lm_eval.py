@@ -1,4 +1,4 @@
-from kenlm import KenLMLanguageModel
+from ngram import NGramLanguageModel
 from mixture import MixtureLanguageModel
 from unigram import UnigramLanguageModel
 from causal import CausalLanguageModel
@@ -12,6 +12,8 @@ import sys
 from scipy.stats import bootstrap
 from datetime import datetime
 import os
+from language_model import SPACE_CHAR
+from language_model import alphabet
 
 if __name__ == "__main__":
 
@@ -119,16 +121,14 @@ if __name__ == "__main__":
             symbol_set += char
         print(f"Modified symbol_set: {symbol_set}")
 
-    response_type = ResponseType.SYMBOL
     if model == 1:
-        lm = UnigramLanguageModel(response_type, symbol_set)
+        lm = UnigramLanguageModel(symbol_set)
     elif model == 2:
-        lm = MixtureLanguageModel(response_type, symbol_set)
+        lm = MixtureLanguageModel(symbol_set)
     elif model == 3:
-        lm = KenLMLanguageModel(response_type, symbol_set, args.model_dir, args.skip_norm)
+        lm = NGramLanguageModel(symbol_set, args.model_dir, args.skip_norm)
     elif model == 4:
-        lm = CausalLanguageModel(response_type=response_type,
-                                 symbol_set=symbol_set,
+        lm = CausalLanguageModel(symbol_set=symbol_set,
                                  lang_model_name=args.model_name,
                                  lm_device=device,
                                  lm_path=args.model_dir,
@@ -140,18 +140,16 @@ if __name__ == "__main__":
                                  mixed_case_context=args.mixed_case_context,
                                  case_simple=args.case_simple)
     elif model == 5:
-        lm = Seq2SeqLanguageModel(response_type=response_type,
-                                 symbol_set=symbol_set,
-                                 lang_model_name=args.model_name,
-                                 lm_device=device,
-                                 lm_path=args.model_dir,
-                                 lm_left_context=args.left_context)
+        lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
+                                  lang_model_name=args.model_name,
+                                  lm_device=device,
+                                  lm_path=args.model_dir,
+                                  lm_left_context=args.left_context)
     elif model == 6:
-        lm = MixtureLanguageModel(response_type=response_type,
-                                 symbol_set=symbol_set,
-                                 lm_types=["CAUSAL", "KENLM"],
-                                 lm_weights=[1.0 - args.ngram_mix, args.ngram_mix],
-                                 lm_params=[{"lang_model_name": args.model_name,
+        lm = MixtureLanguageModel(symbol_set=symbol_set,
+                                  lm_types=["CAUSAL", "KENLM"],
+                                  lm_weights=[1.0 - args.ngram_mix, args.ngram_mix],
+                                  lm_params=[{"lang_model_name": args.model_name,
                                              "lm_device": device,
                                              "lm_path": args.model_dir,
                                              "lm_left_context": args.left_context,
@@ -164,8 +162,7 @@ if __name__ == "__main__":
                                             },
                                             {"lm_path": args.ngram_lm}])
     elif model == 7:
-        lm = CausalByteLanguageModel(response_type=response_type,
-                                     symbol_set=symbol_set,
+        lm = CausalByteLanguageModel(symbol_set=symbol_set,
                                      lang_model_name=args.model_name,
                                      lm_device=device,
                                      lm_path=args.model_dir,
@@ -193,6 +190,10 @@ if __name__ == "__main__":
 
     # Iterate over phrases
     for phrase in phrases:
+        symbols = 0
+        accum = 0.0
+        sent_ppl = 0.0
+
         sentence = phrase.strip()
         if len(sentence) > 0:
             accum = 0.0

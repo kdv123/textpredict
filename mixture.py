@@ -2,16 +2,15 @@ from collections import Counter
 from typing import Optional, Dict, List, Tuple
 from math import isclose
 
-from bcipy.language.main import LanguageModel, ResponseType
-
-from bcipy.helpers.exceptions import InvalidLanguageModelException
+from language_model import LanguageModel
+from exceptions import InvalidLanguageModelException
 
 # pylint: disable=unused-import
 # flake8: noqa
 """All supported models must be imported"""
-from bcipy.language.model.causal import CausalLanguageModel
-from bcipy.language.model.kenlm import KenLMLanguageModel
-from bcipy.language.model.unigram import UnigramLanguageModel
+from causal import CausalLanguageModel
+from ngram import NGramLanguageModel
+from unigram import UnigramLanguageModel
 
 
 class MixtureLanguageModel(LanguageModel):
@@ -47,11 +46,10 @@ class MixtureLanguageModel(LanguageModel):
                 raise InvalidLanguageModelException(f"Supported model types: {MixtureLanguageModel.supported_lm_types}")
 
     def __init__(self,
-                 response_type: ResponseType,
                  symbol_set: List[str],
-                 lm_types: Optional[List[str]] = None,
-                 lm_weights: Optional[List[float]] = None,
-                 lm_params: Optional[List[Dict[str, str]]] = None):
+                 lm_types: List[str],
+                 lm_weights: List[float],
+                 lm_params: List[Dict[str, str]] = None):
         """
         Initialize instance variables and load the language model with given path
         Args:
@@ -64,22 +62,17 @@ class MixtureLanguageModel(LanguageModel):
 
         MixtureLanguageModel.validate_parameters(lm_types, lm_weights, lm_params)
 
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
+        super().__init__(symbol_set=symbol_set)
         self.models = list()
-        self.response_type = response_type
         self.symbol_set = symbol_set
 
-        mixture_params = self.parameters['mixture']
-        self.lm_types = lm_types or mixture_params['model_types']['value']
-        self.lm_weights = lm_weights or mixture_params['model_weights']['value']
-        self.lm_params = lm_params or mixture_params['model_params']['value']
+        self.lm_types = lm_types
+        self.lm_weights = lm_weights
+        self.lm_params = lm_params
 
         MixtureLanguageModel.validate_parameters(self.lm_types, self.lm_weights, self.lm_params)
 
         self.load()
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
 
     @staticmethod
     def interpolate_language_models(lms: List[Dict[str, float]], coeffs: List[float]) -> List[Tuple]:

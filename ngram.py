@@ -1,36 +1,26 @@
 from collections import Counter
 from typing import Optional, List, Tuple
-from bcipy.helpers.symbols import BACKSPACE_CHAR, SPACE_CHAR
-from bcipy.language.main import LanguageModel, ResponseType
-from bcipy.helpers.exceptions import InvalidLanguageModelException, KenLMInstallationException
-from bcipy.config import LM_PATH
-try:
-    import kenlm
-except BaseException:
-    raise KenLMInstallationException(
-        "Please install the requisite kenlm package:\n'pip install kenlm==0.1 --global-option=\"--max_order=12\"")
+from language_model import LanguageModel
+from language_model import LanguageModel
+from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from exceptions import InvalidLanguageModelException
+import kenlm
 import numpy as np
 
 
-class KenLMLanguageModel(LanguageModel):
+class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
 
     def __init__(self,
-                 response_type: ResponseType,
                  symbol_set: List[str],
-                 lm_path: Optional[str] = None,
+                 lm_path: str,
                  skip_symbol_norm: Optional[bool] = False):
 
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
+        super().__init__(symbol_set=symbol_set)
         self.model = None
-        kenlm_params = self.parameters['kenlm']
-        kenlm_model = kenlm_params['model_file']['value']
-        self.lm_path = lm_path or f"{LM_PATH}/{kenlm_model}"
+        self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """
@@ -122,8 +112,6 @@ class KenLMLanguageModel(LanguageModel):
             # Backspace probability under the LM is 0
             if char == BACKSPACE_CHAR:
                 next
-
-            score = 0.0
 
             # Replace the space character with KenLM's <sp> token
             if char == SPACE_CHAR:

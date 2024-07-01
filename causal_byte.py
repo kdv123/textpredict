@@ -1,17 +1,12 @@
 from collections import Counter
 import torch
-from typing import Optional, List, Tuple
+from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from bcipy.helpers.symbols import BACKSPACE_CHAR, SPACE_CHAR
-from bcipy.language.main import LanguageModel, ResponseType
-
-from bcipy.helpers.exceptions import InvalidLanguageModelException
-
+from language_model import LanguageModel
+from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
-
-from bcipy.config import LM_PATH
 
 # This updates transformers 4.20.0 to be able to use the ByGPT5 tokenizer and model
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
@@ -24,10 +19,9 @@ class CausalByteLanguageModel(LanguageModel):
     """Character byte-level language model based on a pre-trained causal model, e.g. ByGPT5"""
 
     def __init__(self,
-                 response_type: ResponseType,
                  symbol_set: List[str],
-                 lang_model_name: Optional[str] = None,
-                 lm_path: Optional[str] = None,
+                 lang_model_name: str,
+                 lm_path: str = None,
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
                  fp16: bool = False,
@@ -47,7 +41,7 @@ class CausalByteLanguageModel(LanguageModel):
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
         """
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
+        super().__init__(symbol_set=symbol_set)
         self.model = None
         self.tokenizer = None
         self.vocab_size = 0
@@ -73,14 +67,8 @@ class CausalByteLanguageModel(LanguageModel):
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
-
-        causal_params = self.parameters['causal']
-        self.model_name = lang_model_name or causal_params['model_name']['value']
-
-        local_model_path = lm_path or causal_params['model_path']['value']
-        # This is a pain to always locate in a certain BciPy directory
-        #self.model_dir = f"{LM_PATH}/{local_model_path}" if local_model_path != "" else self.model_name
-        self.model_dir = f"{local_model_path}" if local_model_path != "" else self.model_name
+        self.model_name = lang_model_name
+        self.model_dir = lm_path if lm_path else self.model_name
 
         self.simple_upper_words = {"i": "I",
                                     "i'll": "I'll",
@@ -88,9 +76,6 @@ class CausalByteLanguageModel(LanguageModel):
                                     "i'd": "I'd",
                                     "i'm": "I'm"}
         self.load()
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
 
     def _build_vocab(self) -> None:
         """

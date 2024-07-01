@@ -1,9 +1,7 @@
 """Uniform language model"""
 from typing import Dict, List, Tuple, Union, Optional
-
 import numpy as np
-
-from bcipy.language.main import LanguageModel, ResponseType
+from language_model import LanguageModel
 
 
 class UniformLanguageModel(LanguageModel):
@@ -17,12 +15,8 @@ class UniformLanguageModel(LanguageModel):
     """
 
     def __init__(self,
-                 response_type: Optional[ResponseType] = None,
                  symbol_set: Optional[List[str]] = None):
-        super().__init__(response_type=response_type, symbol_set=symbol_set)
-
-    def supported_response_types(self) -> List[ResponseType]:
-        return [ResponseType.SYMBOL]
+        super().__init__(symbol_set=symbol_set)
 
     def predict(self, evidence: Union[str, List[str]]) -> List[Tuple]:
         """
