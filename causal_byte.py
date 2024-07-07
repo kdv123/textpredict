@@ -111,7 +111,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
-        #print(f"DEBUG left_context_tokens = {self.left_context_tokens}")
+        print(f"CausalByte: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
 
     def _encode(self, text: str) -> List[int]:
         #print(f"DEBUG _encode '{text}'")

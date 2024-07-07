@@ -84,6 +84,7 @@ if __name__ == "__main__":
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
+    print(f"Prediction left context: '{args.left_context}'")
 
     device = "cpu"
     if args.use_mps:
