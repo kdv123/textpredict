@@ -124,7 +124,8 @@ class CausalLanguageModel(LanguageModel):
 
     def _encode(self, text: str) -> List[int]:
         tokens = self.tokenizer.encode(text)
-        if len(tokens) > 1 and self.model_name.startswith("facebook/opt"):
+        # Both OPT and Llama automatically insert a start token which we want to control ourselves
+        if len(tokens) > 1 and (self.model_name.startswith("facebook/opt") or "Llama-3.1" in self.model_name):
             tokens = tokens[1:]
 
         return tokens
