@@ -384,7 +384,7 @@ if __name__ == "__main__":
         with open(args.stats_file, 'a') as file:
             if not exists:
                 # Header if the stats file doesn't already exist
-                file.write(f"{extra_col}ppl\tsum_log_prob\tsum_symbols\tboot_ppl_pm\tboot_ppl_low\tboot_ppl_high\tphrases\ttime\tparams\tdate_time\n")
+                file.write(f"{extra_col}ppl\tsum_log_prob\tsum_symbols\tboot_ppl_pm\tboot_ppl_low\tboot_ppl_high\tphrases\ttime\tparams\tdate_time\tper_symbol_time\tboot_per_symbol_time\n")
             file.write(f"{extra}"
                          f"{ppl:.6f}"
                          f"\t{sum_log_prob:.6f}"
@@ -395,7 +395,9 @@ if __name__ == "__main__":
                          f"\t{phrase_count}"
                          f"\t{inference_time:.6f}"
                          f"\t{params}"
-                         f"\t{datetime.now()}\n")
+                         f"\t{datetime.now()}"
+                         f"\t{overall_per_symbol_time:.6f}"
+                         f"\t{overall_std_time:.6f}\n")
 
     # Optionally print the predictions that took an abnormal amount of time
     if args.time_outliers:
