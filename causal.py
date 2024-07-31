@@ -114,6 +114,8 @@ class CausalLanguageModel(LanguageModel):
         if self.left_context == "":
             if "gpt2" in self.model_name:
                 self.left_context = "<|endoftext|>"
+            elif "Llama-3.1" in self.model_name:
+                self.left_context = "<|begin_of_text|>"
             else:
                 self.left_context = "</s>"
         # Get token id(s) for the left context we condition all sentences on
