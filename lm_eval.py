@@ -396,8 +396,8 @@ if __name__ == "__main__":
                          f"\t{inference_time:.6f}"
                          f"\t{params}"
                          f"\t{datetime.now()}"
-                         f"\t{overall_per_symbol_time:.6f}"
-                         f"\t{overall_std_time:.6f}\n")
+                         f"\t{overall_per_symbol_time:.6e}"
+                         f"\t{overall_std_time:.6e}\n")
 
     # Optionally print the predictions that took an abnormal amount of time
     if args.time_outliers:
