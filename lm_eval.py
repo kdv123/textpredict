@@ -188,6 +188,7 @@ if __name__ == "__main__":
     sum_log_prob = 0.0
     sum_symbols = 0
     all_symbol_log_probs = []
+    all_sentence_ppls = []
 
     # Iterate over phrases
     for phrase in phrases:
@@ -290,6 +291,8 @@ if __name__ == "__main__":
                 per_symbol_logprob = accum / symbols
                 sent_ppl = pow(10, -1 * per_symbol_logprob)
 
+                all_sentence_ppls.append(sent_ppl)
+
                 # Phrase-level output
                 if verbose >= 1:
                     print(f"sum logprob = {accum:.4f}, per-symbol logprob = {per_symbol_logprob:.4f}, ppl = {sent_ppl:.4f}")
@@ -338,6 +341,8 @@ if __name__ == "__main__":
         srilm_file.write(f"0 zeroprobs, logprob= {sum_log_prob:.4f} ppl= {ppl:.3f} ppl1= {ppl:.3f}\n")
         srilm_file.close()
 
+    avg_sentence_ppl = np.average(all_sentence_ppls)
+
     # Model-level output
     print(f"OVERALL \
         \nphrases = {phrase_count}, \
@@ -348,6 +353,7 @@ if __name__ == "__main__":
         \nsum logprob = {sum_log_prob:.2f} \
         \nsum symbols = {sum_symbols} \
         \nmean symbol log prob = {np.average(all_symbol_log_probs):.4f} \
+        \nmean sentence ppl = {avg_sentence_ppl:.4f} \
         \nppl = {ppl:.4f}")
 
     # Optional fill that contains the log prob of each prediction
@@ -365,11 +371,20 @@ if __name__ == "__main__":
         bootstrap_log_prob = bootstrap(data=(all_symbol_log_probs,),
                                         statistic=np.mean,
                                         confidence_level=0.95)
-        print(f"Bootstrap completed in {(timer() - time_bootstrap):.2f} seconds.")
+        print(f"Bootstrap on log probs completed in {(timer() - time_bootstrap):.2f} seconds.")
 
         ppl_high = pow(10, -1 * bootstrap_log_prob.confidence_interval.low)
         ppl_low = pow(10, -1 * bootstrap_log_prob.confidence_interval.high)
         error_bar = (ppl_high - ppl_low) / 2.0
+
+        time_bootstrap = timer()
+        bootstrap_sentence_ppl = bootstrap(data=(all_sentence_ppls,),
+                                        statistic=np.mean,
+                                        confidence_level=0.95)
+        print(f"Bootstrap on sentence ppls completed in {(timer() - time_bootstrap):.2f} seconds.")
+        sentence_ppl_high = bootstrap_log_prob.confidence_interval.low
+        sentence_ppl_low = bootstrap_log_prob.confidence_interval.high
+        sentence_ppl_error_bar = (sentence_ppl_high - sentence_ppl_low) / 2.0
 
         extra = ""
         extra_col = ""
@@ -384,7 +399,7 @@ if __name__ == "__main__":
         with open(args.stats_file, 'a') as file:
             if not exists:
                 # Header if the stats file doesn't already exist
-                file.write(f"{extra_col}ppl\tsum_log_prob\tsum_symbols\tboot_ppl_pm\tboot_ppl_low\tboot_ppl_high\tphrases\ttime\tparams\tdate_time\tper_symbol_time\tsd_per_symbol_time\n")
+                file.write(f"{extra_col}ppl\tsum_log_prob\tsum_symbols\tboot_ppl_pm\tboot_ppl_low\tboot_ppl_high\tphrases\ttime\tparams\tdate_time\tper_symbol_time\tsd_per_symbol_time\tsentence_ppl\tboot_sentence_ppl\n")
             file.write(f"{extra}"
                          f"{ppl:.6f}"
                          f"\t{sum_log_prob:.6f}"
@@ -397,7 +412,10 @@ if __name__ == "__main__":
                          f"\t{params}"
                          f"\t{datetime.now()}"
                          f"\t{overall_per_symbol_time:.6e}"
-                         f"\t{overall_std_time:.6e}\n")
+                         f"\t{overall_std_time:.6e}"
+                         f"\t{avg_sentence_ppl:.6e}"
+                         f"\t{sentence_ppl_error_bar:.6e}"
+                         f"\n")
 
     # Optionally print the predictions that took an abnormal amount of time
     if args.time_outliers:

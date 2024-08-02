@@ -30,7 +30,6 @@ class CausalLanguageModel(LanguageModel):
         """
         Initialize instance variables and load the language model with given path
         Args:
-            response_type      - SYMBOL only
             symbol_set         - list of symbol strings
             lang_model_name    - name of the Hugging Face casual language model to load
             lm_path            - load fine-tuned model from specified directory
@@ -49,7 +48,6 @@ class CausalLanguageModel(LanguageModel):
         self.vocab_size = 0
         self.valid_vocab = []
         self.vocab = {}
-        self.longest_token = 0
         self.index_to_word = {}
         self.index_to_word_lower = {}
         self.symbol_set_lower = None
@@ -64,13 +62,14 @@ class CausalLanguageModel(LanguageModel):
         self.model_name = lang_model_name
         self.model_dir = lm_path if lm_path else self.model_name
 
-        # parameters for search
+        # Parameters for the search
         self.beam_width = beam_width
         self.batch_size = batch_size
 
-        # backoff to the previous space
+        # How much to backoff from the current tokenization
         self.token_backoff = token_backoff
 
+        # Simple heuristic to correct case in the LM context
         self.simple_upper_words = {"i": "I",
                                     "i'll": "I'll",
                                     "i've": "I've",
@@ -102,8 +101,6 @@ class CausalLanguageModel(LanguageModel):
             if valid:
                 self.valid_vocab += i,
                 length = len(word)
-                if length > self.longest_token:
-                    self.longest_token = length
                 for j in range(length):
                     key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
                     if key not in self.vocab:
