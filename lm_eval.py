@@ -413,8 +413,8 @@ if __name__ == "__main__":
                          f"\t{datetime.now()}"
                          f"\t{overall_per_symbol_time:.6e}"
                          f"\t{overall_std_time:.6e}"
-                         f"\t{avg_sentence_ppl:.6e}"
-                         f"\t{sentence_ppl_error_bar:.6e}"
+                         f"\t{avg_sentence_ppl:.6f}"
+                         f"\t{sentence_ppl_error_bar:.6f}"
                          f"\n")
 
     # Optionally print the predictions that took an abnormal amount of time
