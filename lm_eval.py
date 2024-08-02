@@ -382,8 +382,8 @@ if __name__ == "__main__":
                                         statistic=np.mean,
                                         confidence_level=0.95)
         print(f"Bootstrap on sentence ppls completed in {(timer() - time_bootstrap):.2f} seconds.")
-        sentence_ppl_high = bootstrap_log_prob.confidence_interval.low
-        sentence_ppl_low = bootstrap_log_prob.confidence_interval.high
+        sentence_ppl_high = bootstrap_sentence_ppl.confidence_interval.low
+        sentence_ppl_low = bootstrap_sentence_ppl.confidence_interval.high
         sentence_ppl_error_bar = (sentence_ppl_high - sentence_ppl_low) / 2.0
 
         extra = ""
