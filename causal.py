@@ -173,12 +173,10 @@ class CausalLanguageModel(LanguageModel):
         """
 
         assert self.model is not None, "language model does not exist!"
-
         start_ns = time.time_ns()
 
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
-
         context = converted_context.replace(SPACE_CHAR, ' ')
 
         if self.case_simple and len(context) > 0:
@@ -195,7 +193,6 @@ class CausalLanguageModel(LanguageModel):
             # Handle ending space in the context
             if context[-1] == ' ':
                 cased_context += " "
-            #print(f"Simple casing of left context, from '{context}' to '{cased_context}'")
             context = cased_context
 
         context_lower = context.lower()
@@ -270,6 +267,7 @@ class CausalLanguageModel(LanguageModel):
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits
                     log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
+                self.predict_inference_ns += time.time_ns() - before_inference_ns
 
                 for j in range(current_batch):
                     before_prep_vocab_ns = time.time_ns()
