@@ -82,6 +82,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_start_ns = 0
         self.predict_search_ns = 0
         self.predict_end_ns = 0
+        self.predict_search_inner_ns = 0
 
         self.load()
 
@@ -218,6 +219,7 @@ class CausalLanguageModel(LanguageModel):
             # Add new extended hypotheses to this list
             valid.clear()
 
+            before_search_inner_ns = time.time_ns()
             # Keep going until we have extended all hypotheses in the current set
             while len(current) > 0:
                 current_batch = 0
@@ -318,13 +320,14 @@ class CausalLanguageModel(LanguageModel):
         self.predict_search_ns += after_search_ns - before_search_ns
         self.predict_end_ns += end_ns - after_search_ns
         self.predict_total_ns += end_ns - start_ns
+        self.predict_search_inner_ns += after_search_ns - before_search_inner_ns
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""
-        print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_end_ns} {self.predict_total_ns}")
-        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0} {self.predict_search_ns / self.predict_total_ns * 100.0} {self.predict_end_ns / self.predict_total_ns * 100.0} {self.predict_total_ns / self.predict_total_ns * 100.0}")
+        print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_search_inner_ns} {self.predict_end_ns} {self.predict_total_ns}")
+        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0} {self.predict_search_ns / self.predict_total_ns * 100.0} {self.predict_search_inner_ns / self.predict_total_ns * 100.0} {self.predict_end_ns / self.predict_total_ns * 100.0} {self.predict_total_ns / self.predict_total_ns * 100.0}")
 
     def update(self) -> None:
         """Update the model state"""
