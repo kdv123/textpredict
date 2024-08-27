@@ -352,7 +352,27 @@ class CausalLanguageModel(LanguageModel):
 
         next_char_pred[BACKSPACE_CHAR] = 0.0
 
+        end_ns = time.time_ns()
+        self.predict_start_ns += before_search_ns - start_ns
+        self.predict_search_ns += after_search_ns - before_search_ns
+        self.predict_end_ns += end_ns - after_search_ns
+        self.predict_total_ns += end_ns - start_ns
+
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
+
+    def dump_predict_times(self) -> None:
+        """Print some stats about the prediction timing"""
+        print(f"Predict %: start {self.predict_start_ns / self.predict_total_ns * 100.0:.3f} "
+              f"search {self.predict_search_ns / self.predict_total_ns * 100.0:.3f} "
+              f"search_inner {self.predict_search_inner_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_sequence {self.predict_create_sequence_ns / self.predict_total_ns * 100.0:.3f} "
+              f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f} "
+              f"prep_vocab {self.predict_prep_vocab_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes {self.predict_create_prefixes_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes_top {self.predict_create_prefixes_top_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes_longer {self.predict_create_prefixes_longer_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes_shorter {self.predict_create_prefixes_shorter_ns / self.predict_total_ns * 100.0:.3f} "
+              f"end {self.predict_end_ns / self.predict_total_ns * 100.0:.3f}")
 
     def update(self) -> None:
         """Update the model state"""
