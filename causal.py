@@ -189,7 +189,7 @@ class CausalLanguageModel(LanguageModel):
             # Handle ending space in the context
             if context[-1] == ' ':
                 cased_context += " "
-            print(f"DEBUG, predict, simple case from {context} to {cased_context}")
+            #print(f"DEBUG, predict, simple case from {context} to {cased_context}")
             context = cased_context
 
         context_lower = context.lower()
@@ -203,6 +203,8 @@ class CausalLanguageModel(LanguageModel):
         # If no space, then from the very beginning
         tokens = self._encode(context_lower)
 
+        print(f"DEBUG, predict, left_context_tokens = {self.left_context_tokens}")
+
         # Look for the last space in the context, or -1 if no begin_text in context yet
         pos = context_lower.rfind(" ")
         truncated_tokens = []
@@ -215,35 +217,51 @@ class CausalLanguageModel(LanguageModel):
                 truncated_context = context_lower[0:pos]
             truncated_tokens.extend(self._encode(truncated_context))
 
+        # If token_backoff is -1, then we backoff to the last space.
+        # Otherwise, we use a fixed number looking backwards.
         if self.token_backoff == -1 or len(tokens) - self.token_backoff < len(truncated_tokens):
             tokens = truncated_tokens
         else:
             tokens = tokens[:-self.token_backoff]
+
+        print(f"DEBUG, predict, tokens = {tokens}")
 
         # Build up the sequence text for the context
         # Start after the left context tokens
         sequence_text = ""
         for i in range(len(self.left_context_tokens), len(tokens)):
             sequence_text = sequence_text + self.index_to_word_lower[tokens[i]]
-        valid = [(0.0, tokens, sequence_text)]
-        heapq.heapify(valid)
+        current_hypos = [(0.0, tokens, sequence_text)]
+
+        # We use a priority queue to track the top hypotheses during the beam search.
+        # For a beam of 8, empirical testing showed this was about the same amount
+        # of time as a simpler list that used a linear search to replace when full.
+        heapq.heapify(current_hypos)
 
         # Create a hash mapping each valid following character to a list of log probabilities
         char_to_log_probs = defaultdict(list)
 
-        print(f"DEBUG, predict, search start with {valid}")
+        print(f"DEBUG, predict, search start with {current_hypos}")
 
         before_search_ns = time.time_ns()
-        while len(valid) > 0:
-            # Only work on the top hypotheses from the last round of extension
-            current = list(valid)
+        loop = 0
+        completed = 0
 
-            # Add new extended hypotheses to this list
-            valid.clear()
+        # Add new extended hypotheses to this heap
+        next_hypos = []
+
+        # Start a beam search forward from the backed off token sequence.
+        # Each iteration of this while loop extends hypotheses by all valid tokens.
+        # We only keep at most self.beam_width hypotheses in the valid heap.
+        while len(current_hypos) > 0:
+            # Work on the hypotheses from the last round of extension
+            #current = list(valid)
+            #print(f"DEBUG, predict, loop {loop}, completed {completed}, current = {current}")
+            loop += 1
 
             before_search_inner_ns = time.time_ns()
             # Keep going until we have extended all hypotheses in the current set
-            while len(current) > 0:
+            while len(current_hypos) > 0:
                 current_batch = 0
                 batch_tensors = []
                 batch_sequences = []
@@ -251,9 +269,9 @@ class CausalLanguageModel(LanguageModel):
                 batch_seq_text = []
 
                 before_create_sequence_ns = time.time_ns()
-                while len(current) > 0 and current_batch < self.batch_size:
+                while len(current_hypos) > 0 and current_batch < self.batch_size:
                     # Get the new sequence to work on
-                    (current_likelihood, sequence, sequence_text) = current.pop(0)
+                    (current_likelihood, sequence, sequence_text) = current_hypos.pop(0)
                     batch_tensors += torch.tensor(sequence),
                     batch_sequences += sequence,
                     batch_likelihoods += current_likelihood,
@@ -287,8 +305,8 @@ class CausalLanguageModel(LanguageModel):
                                 extra_vocab += tokenization[0],
                     self.predict_prep_vocab_ns += time.time_ns() - before_prep_vocab_ns
 
-                    # Create a list of token indexes that are a prefix of target text
-                    # We go over all the integer IDs in the vocab and extra_vocab lists
+                    # Create a list of token indexes that are a prefix of the target text.
+                    # We go over all the integer IDs in the vocab and extra_vocab lists.
                     before_create_prefixes_ns = time.time_ns()
                     for i in itertools.chain(vocab, extra_vocab):
                         before_create_prefixes_top_ns = time.time_ns()
@@ -297,10 +315,9 @@ class CausalLanguageModel(LanguageModel):
                         hypo_seq = batch_sequences[j].copy()
                         hypo_seq += i,
 
-                        # Add the log prob of this token to the previous running total
-                        # For some reason the float cast makes it run faster (about twice as fast)
-                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])  # time 765.71s, 5 phrases
-                        # likelihood = batch_likelihoods[j] + log_probs[j][i]  # time 1800.90s, 5 phrases
+                        # Add the log prob of this token to the previous running total.
+                        # For some reason the float cast makes it run about twice as fast!
+                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])
                         self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
 
                         # Require hypotheses extend beyond the existing typed context
@@ -308,18 +325,24 @@ class CausalLanguageModel(LanguageModel):
                             before_create_prefixes_longer_ns = time.time_ns()
                             char_to_log_probs[hypo_str[target_pos]] += likelihood,
                             self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
+                            completed += 1
                         else:
                             before_create_prefixes_shorter_ns = time.time_ns()
                             hypo = (likelihood, hypo_seq, hypo_str)
-                            if len(valid) < self.beam_width:
-                                heapq.heappush(valid, hypo)
+                            if len(next_hypos) < self.beam_width:
+                                # We are under the beam limit so just add it
+                                heapq.heappush(next_hypos, hypo)
                             else:
-                                heapq.heappushpop(valid, hypo)
+                                # Replace the worst hypotheses with the new one
+                                heapq.heappushpop(next_hypos, hypo)
                             self.predict_create_prefixes_shorter_ns += time.time_ns() - before_create_prefixes_shorter_ns
 
                     self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
-
+            # Swap in the extended set as the new current working set
+            current_hypos = next_hypos
+            next_hypos = []
             self.predict_search_inner_ns += time.time_ns() - before_search_inner_ns
+
         after_search_ns = time.time_ns()
 
         # Parallel array to symbol_set for storing the marginals
@@ -427,3 +450,4 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
+
