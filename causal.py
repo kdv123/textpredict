@@ -9,7 +9,7 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
-import sys
+import time
 from collections import defaultdict
 
 
@@ -77,6 +77,21 @@ class CausalLanguageModel(LanguageModel):
                                     "i've": "I've",
                                     "i'd": "I'd",
                                     "i'm": "I'm"}
+
+        # Track how much time spent in different parts of the predict function
+        self.predict_total_ns = 0
+        self.predict_start_ns = 0
+        self.predict_search_ns = 0
+        self.predict_end_ns = 0
+        self.predict_search_inner_ns = 0
+        self.predict_inference_ns = 0
+        self.predict_create_sequence_ns = 0
+        self.predict_create_prefixes_ns = 0
+        self.predict_create_prefixes_top_ns = 0
+        self.predict_create_prefixes_longer_ns = 0
+        self.predict_create_prefixes_shorter_ns = 0
+        self.predict_prep_vocab_ns = 0
+
         self.load()
 
     def _build_vocab(self) -> None:
@@ -159,6 +174,8 @@ class CausalLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
+        start_ns = time.time_ns()
+
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
 
@@ -218,8 +235,9 @@ class CausalLanguageModel(LanguageModel):
         heapq.heapify(valid)
 
         # Create a hash mapping each valid following character to a list of log probabilities
-        char_to_log_probs = {}
+        char_to_log_probs = defaultdict(list)
 
+        before_search_ns = time.time_ns()
         while len(valid) > 0:
             # Only work on the top hypotheses from the last round of extension
             current = list(valid)
@@ -227,6 +245,7 @@ class CausalLanguageModel(LanguageModel):
             # Add new extended hypotheses to this list
             valid.clear()
 
+            before_search_inner_ns = time.time_ns()
             # Keep going until we have extended all hypotheses in the current set
             while len(current) > 0:
                 current_batch = 0
@@ -234,6 +253,8 @@ class CausalLanguageModel(LanguageModel):
                 batch_sequences = []
                 batch_likelihoods = []
                 batch_seq_text = []
+
+                before_create_sequence_ns = time.time_ns()
                 while len(current) > 0 and current_batch < self.batch_size:
                     # Get the new sequence to work on
                     (current_likelihood, sequence, sequence_text) = current.pop(0)
@@ -242,14 +263,17 @@ class CausalLanguageModel(LanguageModel):
                     batch_likelihoods += current_likelihood,
                     batch_seq_text += sequence_text,
                     current_batch += 1
-
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
+                self.predict_create_sequence_ns += time.time_ns() - before_create_sequence_ns
 
+                before_inference_ns = time.time_ns()
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits
                     log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
 
                 for j in range(current_batch):
+                    before_prep_vocab_ns = time.time_ns()
+
                     sequence_text = batch_seq_text[j]
                     vocab = []
                     extra_vocab = []
@@ -264,34 +288,42 @@ class CausalLanguageModel(LanguageModel):
                             tokenization = self._encode(context_lower[len(sequence_text):len(sequence_text) + i])
                             if len(tokenization) == 1:
                                 extra_vocab += tokenization[0],
+                    self.predict_prep_vocab_ns += time.time_ns() - before_prep_vocab_ns
 
                     # Create a list of token indexes that are a prefix of target text
                     # We go over all the integer IDs in the vocab and extra_vocab lists
+                    before_create_prefixes_ns = time.time_ns()
                     for i in itertools.chain(vocab, extra_vocab):
+                        before_create_prefixes_top_ns = time.time_ns()
+
                         hypo_str = sequence_text + self.index_to_word_lower[i]
                         hypo_seq = batch_sequences[j].copy()
                         hypo_seq += i,
 
                         # Add the log prob of this token to the previous running total
-                        # For some reason the float cast makes it run faster
-                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])
-                        # If we have extended to a space following the context, then that hypothesis gets to be done
-                        # This takes a lot longer that just requiring extending beyond existing context
-                        # Just require hypotheses to extend beyond the existing typed context
+                        # For some reason the float cast makes it run faster (about twice as fast)
+                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])  # time 765.71s, 5 phrases
+                        # likelihood = batch_likelihoods[j] + log_probs[j][i]  # time 1800.90s, 5 phrases
+                        self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
+
+                        # Require hypotheses extend beyond the existing typed context
                         if len(hypo_str) > len(context):
-                            ch = hypo_str[target_pos]
-
-                            # Create an empty list if we haven't seen this character before
-                            if ch not in char_to_log_probs:
-                                char_to_log_probs[ch] = []
-                            char_to_log_probs[ch] += likelihood,
-
+                            before_create_prefixes_longer_ns = time.time_ns()
+                            char_to_log_probs[hypo_str[target_pos]] += likelihood,
+                            self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
+                            before_create_prefixes_shorter_ns = time.time_ns()
                             hypo = (likelihood, hypo_seq, hypo_str)
                             if len(valid) < self.beam_width:
                                 heapq.heappush(valid, hypo)
                             else:
                                 heapq.heappushpop(valid, hypo)
+                            self.predict_create_prefixes_shorter_ns += time.time_ns() - before_create_prefixes_shorter_ns
+
+                    self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
+
+            self.predict_search_inner_ns += time.time_ns() - before_search_inner_ns
+        after_search_ns = time.time_ns()
 
         # Parallel array to symbol_set for storing the marginals
         char_probs = []

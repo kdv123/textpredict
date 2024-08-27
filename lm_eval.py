@@ -417,6 +417,10 @@ if __name__ == "__main__":
                          f"\t{sentence_ppl_error_bar:.6f}"
                          f"\n")
 
+    # Prediction timing stats for the causal LLM
+    if model == 4:
+        lm.dump_predict_times()
+
     # Optionally print the predictions that took an abnormal amount of time
     if args.time_outliers:
         for (i, time) in enumerate(overall_predict_time_arr):
