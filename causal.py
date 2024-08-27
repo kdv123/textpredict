@@ -86,6 +86,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_inference_ns = 0
         self.predict_create_sequence_ns = 0
         self.predict_create_prefixes_ns = 0
+        self.predict_create_prefixes_top_ns = 0
 
         self.load()
 
@@ -269,6 +270,8 @@ class CausalLanguageModel(LanguageModel):
                     # We go over all the integer IDs in the vocab and extra_vocab lists
                     before_create_prefixes_ns = time.time_ns()
                     for i in itertools.chain(vocab, extra_vocab):
+                        before_create_prefixes_top_ns = time.time_ns()
+
                         hypo_str = sequence_text + self.index_to_word_lower[i]
                         hypo_seq = batch_sequences[j].copy()
                         hypo_seq += i,
@@ -276,9 +279,9 @@ class CausalLanguageModel(LanguageModel):
                         # Add the log prob of this token to the previous running total
                         # For some reason the float cast makes it run faster
                         likelihood = batch_likelihoods[j] + float(log_probs[j][i])
-                        # If we have extended to a space following the context, then that hypothesis gets to be done
-                        # This takes a lot longer that just requiring extending beyond existing context
-                        # Just require hypotheses to extend beyond the existing typed context
+                        self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
+
+                        # Require hypotheses extend beyond the existing typed context
                         if len(hypo_str) > len(context):
                             ch = hypo_str[target_pos]
 
