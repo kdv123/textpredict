@@ -89,6 +89,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_create_prefixes_top_ns = 0
         self.predict_create_prefixes_longer_ns = 0
         self.predict_create_prefixes_shorter_ns = 0
+        self.predict_prep_vocab_ns = 0
 
         self.load()
 
@@ -253,6 +254,8 @@ class CausalLanguageModel(LanguageModel):
                 self.predict_inference_ns += time.time_ns() - before_inference_ns
 
                 for j in range(current_batch):
+                    before_prep_vocab_ns = time.time_ns()
+
                     sequence_text = batch_seq_text[j]
                     vocab = []
                     extra_vocab = []
@@ -267,6 +270,7 @@ class CausalLanguageModel(LanguageModel):
                             tokenization = self._encode(context_lower[len(sequence_text):len(sequence_text) + i])
                             if len(tokenization) == 1:
                                 extra_vocab += tokenization[0],
+                    self.predict_prep_vocab_ns += time.time_ns() - before_prep_vocab_ns
 
                     # Create a list of token indexes that are a prefix of target text
                     # We go over all the integer IDs in the vocab and extra_vocab lists
@@ -349,6 +353,7 @@ class CausalLanguageModel(LanguageModel):
               f"search_inner {self.predict_search_inner_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_sequence {self.predict_create_sequence_ns / self.predict_total_ns * 100.0:.3f} "
               f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f} "
+              f"prep_vocab {self.predict_prep_vocab_ns / self.predict_total_ns * 100.0:.3f} "              
               f"create_prefixes {self.predict_create_prefixes_ns / self.predict_total_ns * 100.0:.3f} "              
               f"create_prefixes_top {self.predict_create_prefixes_top_ns / self.predict_total_ns * 100.0:.3f} "              
               f"create_prefixes_longer {self.predict_create_prefixes_longer_ns / self.predict_total_ns * 100.0:.3f} "              
