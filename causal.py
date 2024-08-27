@@ -87,6 +87,8 @@ class CausalLanguageModel(LanguageModel):
         self.predict_create_sequence_ns = 0
         self.predict_create_prefixes_ns = 0
         self.predict_create_prefixes_top_ns = 0
+        self.predict_create_prefixes_longer_ns = 0
+        self.predict_create_prefixes_shorter_ns = 0
 
         self.load()
 
@@ -283,19 +285,23 @@ class CausalLanguageModel(LanguageModel):
 
                         # Require hypotheses extend beyond the existing typed context
                         if len(hypo_str) > len(context):
+                            before_create_prefixes_longer_ns = time.time_ns()
                             ch = hypo_str[target_pos]
 
                             # Create an empty list if we haven't seen this character before
                             if ch not in char_to_log_probs:
                                 char_to_log_probs[ch] = []
                             char_to_log_probs[ch] += likelihood,
-
+                            self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
+                            before_create_prefixes_shorter_ns = time.time_ns()
                             hypo = (likelihood, hypo_seq, hypo_str)
                             if len(valid) < self.beam_width:
                                 heapq.heappush(valid, hypo)
                             else:
                                 heapq.heappushpop(valid, hypo)
+                            self.predict_create_prefixes_shorter_ns += time.time_ns() - before_create_prefixes_shorter_ns
+
                     self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
 
             self.predict_search_inner_ns += time.time_ns() - before_search_inner_ns
@@ -344,6 +350,9 @@ class CausalLanguageModel(LanguageModel):
               f"create_sequence {self.predict_create_sequence_ns / self.predict_total_ns * 100.0:.3f} "
               f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_prefixes {self.predict_create_prefixes_ns / self.predict_total_ns * 100.0:.3f} "              
+              f"create_prefixes_top {self.predict_create_prefixes_top_ns / self.predict_total_ns * 100.0:.3f} "              
+              f"create_prefixes_longer {self.predict_create_prefixes_longer_ns / self.predict_total_ns * 100.0:.3f} "              
+              f"create_prefixes_shorter {self.predict_create_prefixes_shorter_ns / self.predict_total_ns * 100.0:.3f} "              
               f"end {self.predict_end_ns / self.predict_total_ns * 100.0:.3f}")
 
     def update(self) -> None:
