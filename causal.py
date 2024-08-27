@@ -244,6 +244,7 @@ class CausalLanguageModel(LanguageModel):
                     logits = self.model(tokens_tensor).logits
                     log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
                 after_inference_ns = time.time_ns()
+                self.predict_inference_ns += after_inference_ns - before_inference_ns
 
                 for j in range(current_batch):
                     sequence_text = batch_seq_text[j]
@@ -288,7 +289,8 @@ class CausalLanguageModel(LanguageModel):
                                 heapq.heappush(valid, hypo)
                             else:
                                 heapq.heappushpop(valid, hypo)
-
+            after_search_inner_ns = time.time_ns()
+            self.predict_search_inner_ns += after_search_inner_ns - before_search_inner_ns
         after_search_ns = time.time_ns()
 
         # Parallel array to symbol_set for storing the marginals
@@ -323,8 +325,6 @@ class CausalLanguageModel(LanguageModel):
         self.predict_search_ns += after_search_ns - before_search_ns
         self.predict_end_ns += end_ns - after_search_ns
         self.predict_total_ns += end_ns - start_ns
-        self.predict_search_inner_ns += after_search_ns - before_search_inner_ns
-        self.predict_inference_ns += after_inference_ns - before_inference_ns
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
