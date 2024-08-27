@@ -83,6 +83,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_search_ns = 0
         self.predict_end_ns = 0
         self.predict_search_inner_ns = 0
+        self.predict_inference_ns = 0
 
         self.load()
 
@@ -238,9 +239,11 @@ class CausalLanguageModel(LanguageModel):
 
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
 
+                before_inference_ns = time.time_ns()
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits
                     log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
+                after_inference_ns = time.time_ns()
 
                 for j in range(current_batch):
                     sequence_text = batch_seq_text[j]
@@ -321,13 +324,19 @@ class CausalLanguageModel(LanguageModel):
         self.predict_end_ns += end_ns - after_search_ns
         self.predict_total_ns += end_ns - start_ns
         self.predict_search_inner_ns += after_search_ns - before_search_inner_ns
+        self.predict_inference_ns += after_inference_ns - before_inference_ns
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""
-        print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_search_inner_ns} {self.predict_end_ns} {self.predict_total_ns}")
-        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0} {self.predict_search_ns / self.predict_total_ns * 100.0} {self.predict_search_inner_ns / self.predict_total_ns * 100.0} {self.predict_end_ns / self.predict_total_ns * 100.0} {self.predict_total_ns / self.predict_total_ns * 100.0}")
+        print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_search_inner_ns} {self.predict_inference_ns} {self.predict_end_ns} {self.predict_total_ns}")
+        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0} "
+              f"{self.predict_search_ns / self.predict_total_ns * 100.0} "
+              f"{self.predict_search_inner_ns / self.predict_total_ns * 100.0} "
+              f"{self.predict_inference_ns / self.predict_total_ns * 100.0} "
+              f"{self.predict_end_ns / self.predict_total_ns * 100.0} "
+              f"{self.predict_total_ns / self.predict_total_ns * 100.0}")
 
     def update(self) -> None:
         """Update the model state"""
