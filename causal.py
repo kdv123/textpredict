@@ -11,6 +11,7 @@ from scipy.special import logsumexp
 from scipy.special import softmax
 import time
 from collections import defaultdict
+import sys
 
 
 class CausalLanguageModel(LanguageModel):
