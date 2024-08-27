@@ -85,6 +85,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_search_inner_ns = 0
         self.predict_inference_ns = 0
         self.predict_create_sequence_ns = 0
+        self.predict_create_prefixes_ns = 0
 
         self.load()
 
@@ -240,15 +241,13 @@ class CausalLanguageModel(LanguageModel):
                     batch_seq_text += sequence_text,
                     current_batch += 1
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
-                after_create_sequence_ns = time.time_ns()
-                self.predict_create_sequence_ns += after_create_sequence_ns - before_create_sequence_ns
+                self.predict_create_sequence_ns += time.time_ns() - before_create_sequence_ns
 
                 before_inference_ns = time.time_ns()
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits
                     log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
-                after_inference_ns = time.time_ns()
-                self.predict_inference_ns += after_inference_ns - before_inference_ns
+                self.predict_inference_ns += time.time_ns() - before_inference_ns
 
                 for j in range(current_batch):
                     sequence_text = batch_seq_text[j]
@@ -268,6 +267,7 @@ class CausalLanguageModel(LanguageModel):
 
                     # Create a list of token indexes that are a prefix of target text
                     # We go over all the integer IDs in the vocab and extra_vocab lists
+                    before_create_prefixes_ns = time.time_ns()
                     for i in itertools.chain(vocab, extra_vocab):
                         hypo_str = sequence_text + self.index_to_word_lower[i]
                         hypo_seq = batch_sequences[j].copy()
@@ -293,8 +293,9 @@ class CausalLanguageModel(LanguageModel):
                                 heapq.heappush(valid, hypo)
                             else:
                                 heapq.heappushpop(valid, hypo)
-            after_search_inner_ns = time.time_ns()
-            self.predict_search_inner_ns += after_search_inner_ns - before_search_inner_ns
+                    self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
+
+            self.predict_search_inner_ns += time.time_ns() - before_search_inner_ns
         after_search_ns = time.time_ns()
 
         # Parallel array to symbol_set for storing the marginals
@@ -339,6 +340,7 @@ class CausalLanguageModel(LanguageModel):
               f"search_inner {self.predict_search_inner_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_sequence {self.predict_create_sequence_ns / self.predict_total_ns * 100.0:.3f} "
               f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes {self.predict_create_prefixes_ns / self.predict_total_ns * 100.0:.3f} "              
               f"end {self.predict_end_ns / self.predict_total_ns * 100.0:.3f}")
 
     def update(self) -> None:
