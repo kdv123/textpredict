@@ -9,6 +9,7 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
+import time
 
 
 class CausalLanguageModel(LanguageModel):
@@ -75,6 +76,13 @@ class CausalLanguageModel(LanguageModel):
                                     "i've": "I've",
                                     "i'd": "I'd",
                                     "i'm": "I'm"}
+
+        # Track how much time spent in different parts of the predict function
+        self.predict_total_ns = 0
+        self.predict_start_ns = 0
+        self.predict_search_ns = 0
+        self.predict_end_ns = 0
+
         self.load()
 
     def _build_vocab(self) -> None:
@@ -139,6 +147,8 @@ class CausalLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
+        start_ns = time.time_ns()
+
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
 
@@ -200,6 +210,7 @@ class CausalLanguageModel(LanguageModel):
         # Create a hash mapping each valid following character to a list of log probabilities
         char_to_log_probs = {}
 
+        before_search_ns = time.time_ns()
         while len(valid) > 0:
             # Only work on the top hypotheses from the last round of extension
             current = list(valid)
@@ -273,6 +284,8 @@ class CausalLanguageModel(LanguageModel):
                             else:
                                 heapq.heappushpop(valid, hypo)
 
+        after_search_ns = time.time_ns()
+
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
         for ch in self.symbol_set_lower:
@@ -300,7 +313,18 @@ class CausalLanguageModel(LanguageModel):
 
         next_char_pred[BACKSPACE_CHAR] = 0.0
 
+        end_ns = time.time_ns()
+        self.predict_start_ns += before_search_ns - start_ns
+        self.predict_search_ns += after_search_ns - before_search_ns
+        self.predict_end_ns += end_ns - after_search_ns
+        self.predict_total_ns += end_ns - start_ns
+
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
+
+    def dump_predict_times(self) -> None:
+        """Print some stats about the prediction timing"""
+        print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_end_ns} {self.predict_total_ns}")
+        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0} {self.predict_search_ns / self.predict_total_ns * 100.0} {self.predict_end_ns / self.predict_total_ns * 100.0} {self.predict_total_ns / self.predict_total_ns * 100.0}")
 
     def update(self) -> None:
         """Update the model state"""
