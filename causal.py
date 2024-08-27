@@ -292,12 +292,7 @@ class CausalLanguageModel(LanguageModel):
                         # Require hypotheses extend beyond the existing typed context
                         if len(hypo_str) > len(context):
                             before_create_prefixes_longer_ns = time.time_ns()
-                            ch = hypo_str[target_pos]
-
-                            # Create an empty list if we haven't seen this character before
-#                            if ch not in char_to_log_probs:
-#                                char_to_log_probs[ch] = []
-                            char_to_log_probs[ch] += likelihood,
+                            char_to_log_probs[hypo_str[target_pos]] += likelihood,
                             self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
                             before_create_prefixes_shorter_ns = time.time_ns()
