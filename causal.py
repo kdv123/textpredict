@@ -331,12 +331,11 @@ class CausalLanguageModel(LanguageModel):
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""
         print(f"Predict times: {self.predict_start_ns} {self.predict_search_ns} {self.predict_search_inner_ns} {self.predict_inference_ns} {self.predict_end_ns} {self.predict_total_ns}")
-        print(f"Predict %: {self.predict_start_ns / self.predict_total_ns * 100.0:.1f} "
-              f"{self.predict_search_ns / self.predict_total_ns * 100.0:.1f} "
-              f"{self.predict_search_inner_ns / self.predict_total_ns * 100.0:.1f} "
-              f"{self.predict_inference_ns / self.predict_total_ns * 100.0:.1f} "
-              f"{self.predict_end_ns / self.predict_total_ns * 100.0:.1f} "
-              f"{self.predict_total_ns / self.predict_total_ns * 100.0:.1f}")
+        print(f"Predict %: start {self.predict_start_ns / self.predict_total_ns * 100.0:.1f} "
+              f"search {self.predict_search_ns / self.predict_total_ns * 100.0:.1f} "
+              f"search_inner {self.predict_search_inner_ns / self.predict_total_ns * 100.0:.1f} "
+              f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.1f} "
+              f"end {self.predict_end_ns / self.predict_total_ns * 100.0:.1f}")
 
     def update(self) -> None:
         """Update the model state"""
