@@ -10,6 +10,7 @@ from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
 import time
+from collections import defaultdict
 
 
 class CausalLanguageModel(LanguageModel):
@@ -216,7 +217,7 @@ class CausalLanguageModel(LanguageModel):
         heapq.heapify(valid)
 
         # Create a hash mapping each valid following character to a list of log probabilities
-        char_to_log_probs = {}
+        char_to_log_probs = defaultdict([])
 
         before_search_ns = time.time_ns()
         while len(valid) > 0:
@@ -294,8 +295,8 @@ class CausalLanguageModel(LanguageModel):
                             ch = hypo_str[target_pos]
 
                             # Create an empty list if we haven't seen this character before
-                            if ch not in char_to_log_probs:
-                                char_to_log_probs[ch] = []
+#                            if ch not in char_to_log_probs:
+#                                char_to_log_probs[ch] = []
                             char_to_log_probs[ch] += likelihood,
                             self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
