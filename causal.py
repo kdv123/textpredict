@@ -124,7 +124,6 @@ class CausalLanguageModel(LanguageModel):
                         self.vocab[key] = []
                     self.vocab[key] += i,
 
-#        print(f"DEBUG, self.vocab = {self.vocab}")
         print(f"DEBUG, keys in self.vocab = {len(self.vocab)}")
         print(f"DEBUG, size of self.vocab in bytes = {sys.getsizeof(self.vocab)}")
 
