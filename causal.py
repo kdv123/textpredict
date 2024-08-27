@@ -172,6 +172,9 @@ class CausalLanguageModel(LanguageModel):
         converted_context_lower = converted_context.lower()
         context = converted_context.replace(SPACE_CHAR, ' ')
 
+        # If using the simple case feature, we need to go through the actual
+        # left context and capitalize the first letter in the sentence as
+        # well as any word in our list of words that should be capitalized.
         if self.case_simple and len(context) > 0:
             cased_context = ""
             words = context.split()
@@ -186,6 +189,7 @@ class CausalLanguageModel(LanguageModel):
             # Handle ending space in the context
             if context[-1] == ' ':
                 cased_context += " "
+            print(f"DEBUG, predict, simple case from {context} to {cased_context}")
             context = cased_context
 
         context_lower = context.lower()
