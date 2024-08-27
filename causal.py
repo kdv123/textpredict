@@ -217,7 +217,7 @@ class CausalLanguageModel(LanguageModel):
         heapq.heapify(valid)
 
         # Create a hash mapping each valid following character to a list of log probabilities
-        char_to_log_probs = defaultdict([])
+        char_to_log_probs = defaultdict(list)
 
         before_search_ns = time.time_ns()
         while len(valid) > 0:
