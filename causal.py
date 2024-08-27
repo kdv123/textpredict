@@ -284,7 +284,8 @@ class CausalLanguageModel(LanguageModel):
 
                         # Add the log prob of this token to the previous running total
                         # For some reason the float cast makes it run faster
-                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])
+#                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])
+                        likelihood = batch_likelihoods[j] + log_probs[j][i]
                         self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
 
                         # Require hypotheses extend beyond the existing typed context
