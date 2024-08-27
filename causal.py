@@ -9,6 +9,8 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
+import sys
+from collections import defaultdict
 
 
 class CausalLanguageModel(LanguageModel):
@@ -106,6 +108,24 @@ class CausalLanguageModel(LanguageModel):
                     if key not in self.vocab:
                         self.vocab[key] = []
                     self.vocab[key] += i,
+
+#        print(f"DEBUG, self.vocab = {self.vocab}")
+        print(f"DEBUG, keys in self.vocab = {len(self.vocab)}")
+        print(f"DEBUG, size of self.vocab in bytes = {sys.getsizeof(self.vocab)}")
+
+        # Example of something with a small number of tokens
+        print(f"DEBUG, self.vocab = {self.vocab['cyclo']}")
+        print(f"DEBUG, self.vocab = {self.index_to_word[self.vocab['cyclo'][0]]}")
+        print(f"DEBUG, self.vocab = {self.index_to_word[self.vocab['cyclo'][1]]}")
+
+        # Stats on how many keys with a given length
+        len_to_count = defaultdict(int)
+        for key in self.vocab:
+            count = len(self.vocab[key])
+            len_to_count[count] += 1
+        print(f"DEBUG, len_to_count = {len_to_count}")
+        for i in sorted(len_to_count.keys()):
+            print(f"DEBUG, len {i} = {len_to_count[i]}")
 
         # Get the index we use for the start or end pseudo-word
         if self.left_context == "":
