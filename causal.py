@@ -50,7 +50,7 @@ class CausalLanguageModel(LanguageModel):
         self.tokenizer = None
         self.vocab_size = 0
         self.valid_vocab = []
-        self.vocab = {}
+        self.vocab = defaultdict(list)
         self.index_to_word = {}
         self.index_to_word_lower = {}
         self.symbol_set_lower = None
@@ -100,11 +100,15 @@ class CausalLanguageModel(LanguageModel):
         Build a vocabulary table mapping token index to word strings
         """
 
+        # Loop over all the subword tokens in the LLM
         for i in range(self.vocab_size):
+            # Create a map from the subword token integer ID to the mixed and lowercase string versions
             word = self.tokenizer.decode([i])
             word_lower = word.lower()
             self.index_to_word[i] = word
             self.index_to_word_lower[i] = word_lower
+
+            # Check if all the characters in the subword token are in our valid symbol set
             valid = True
             for ch in word_lower:
                 # The space char is only valid once we convert spaces to the space char
@@ -116,31 +120,19 @@ class CausalLanguageModel(LanguageModel):
                 elif ch not in self.symbol_set_lower:
                     valid = False
                     break
+
+            # If the subword token symbols are all valid, then add it to the list of valid token IDs
             if valid:
                 self.valid_vocab += i,
-                length = len(word)
-                for j in range(length):
+                # Add this token ID to all lists for its valid text prefixes
+                for j in range(len(word)):
                     key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
-                    if key not in self.vocab:
-                        self.vocab[key] = []
                     self.vocab[key] += i,
 
-        print(f"DEBUG, keys in self.vocab = {len(self.vocab)}")
-        print(f"DEBUG, size of self.vocab in bytes = {sys.getsizeof(self.vocab)}")
-
-        # Example of something with a small number of tokens
-        print(f"DEBUG, self.vocab = {self.vocab['cyclo']}")
-        print(f"DEBUG, self.vocab = {self.index_to_word[self.vocab['cyclo'][0]]}")
-        print(f"DEBUG, self.vocab = {self.index_to_word[self.vocab['cyclo'][1]]}")
-
-        # Stats on how many keys with a given length
-        len_to_count = defaultdict(int)
-        for key in self.vocab:
-            count = len(self.vocab[key])
-            len_to_count[count] += 1
-        print(f"DEBUG, len_to_count = {len_to_count}")
-        for i in sorted(len_to_count.keys()):
-            print(f"DEBUG, len {i} = {len_to_count[i]}")
+        # When done, self.vocab can be used to map to possible following subword tokens given some text, e.g.:
+        # self.vocab["cyclo"] = [47495, 49484]
+        # self.index_to_word[self.vocab["cyclo"][0]] = cyclop
+        # self.index_to_word[self.vocab["cyclo"][1]] = cyclopedia
 
         # Get the index we use for the start or end pseudo-word
         if self.left_context == "":
@@ -150,6 +142,7 @@ class CausalLanguageModel(LanguageModel):
                 self.left_context = "<|begin_of_text|>"
             else:
                 self.left_context = "</s>"
+
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
         print(f"Causal: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
@@ -233,6 +226,8 @@ class CausalLanguageModel(LanguageModel):
 
         # Create a hash mapping each valid following character to a list of log probabilities
         char_to_log_probs = defaultdict(list)
+
+        print(f"DEBUG, predict, search start with {valid}")
 
         before_search_ns = time.time_ns()
         while len(valid) > 0:
