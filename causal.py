@@ -240,7 +240,7 @@ class CausalLanguageModel(LanguageModel):
 
         #print(f"DEBUG, predict, search start with {current_hypos}")
 
-        before_search_ns = time.time_ns()
+        #before_search_ns = time.time_ns()
         #loop = 0
         #completed = 0
 
@@ -308,9 +308,9 @@ class CausalLanguageModel(LanguageModel):
 
                     # Create a list of token indexes that are a prefix of the target text.
                     # We go over all the integer IDs in the vocab and extra_vocab lists.
-                    before_create_prefixes_ns = time.time_ns()
+                    #before_create_prefixes_ns = time.time_ns()
                     for token_id in itertools.chain(vocab, extra_vocab):
-                        before_create_prefixes_top_ns = time.time_ns()
+                        #before_create_prefixes_top_ns = time.time_ns()
                         hypo_seq = batch_sequences[batch_index].copy()
                         hypo_seq += token_id,
                         #self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
