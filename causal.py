@@ -92,6 +92,7 @@ class CausalLanguageModel(LanguageModel):
         self.predict_create_prefixes_longer_ns = 0
         self.predict_create_prefixes_shorter_ns = 0
         self.predict_prep_vocab_ns = 0
+        self.predict_create_prefixes_likelihood_ns = 0
 
         self.load()
 
@@ -226,12 +227,8 @@ class CausalLanguageModel(LanguageModel):
 
         print(f"DEBUG, predict, tokens = {tokens}")
 
-        # Build up the sequence text for the context
-        # Start after the left context tokens
-        sequence_text = ""
-        for i in range(len(self.left_context_tokens), len(tokens)):
-            sequence_text = sequence_text + self.index_to_word_lower[tokens[i]]
-        current_hypos = [(0.0, tokens, sequence_text)]
+        # Our starting hypothesis that we'll be extending
+        current_hypos = [(0.0, tokens)]
 
         # We use a priority queue to track the top hypotheses during the beam search.
         # For a beam of 8, empirical testing showed this was about the same amount
@@ -255,8 +252,7 @@ class CausalLanguageModel(LanguageModel):
         # We only keep at most self.beam_width hypotheses in the valid heap.
         while len(current_hypos) > 0:
             # Work on the hypotheses from the last round of extension
-            #current = list(valid)
-            #print(f"DEBUG, predict, loop {loop}, completed {completed}, current = {current}")
+            #print(f"DEBUG, predict, loop {loop}, completed {completed}, current = {current_hypos}")
             loop += 1
 
             before_search_inner_ns = time.time_ns()
@@ -266,16 +262,14 @@ class CausalLanguageModel(LanguageModel):
                 batch_tensors = []
                 batch_sequences = []
                 batch_likelihoods = []
-                batch_seq_text = []
 
                 before_create_sequence_ns = time.time_ns()
                 while len(current_hypos) > 0 and current_batch < self.batch_size:
                     # Get the new sequence to work on
-                    (current_likelihood, sequence, sequence_text) = current_hypos.pop(0)
+                    (current_likelihood, sequence) = current_hypos.pop(0)
                     batch_tensors += torch.tensor(sequence),
                     batch_sequences += sequence,
                     batch_likelihoods += current_likelihood,
-                    batch_seq_text += sequence_text,
                     current_batch += 1
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
                 self.predict_create_sequence_ns += time.time_ns() - before_create_sequence_ns
@@ -283,13 +277,19 @@ class CausalLanguageModel(LanguageModel):
                 before_inference_ns = time.time_ns()
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits
-                    log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
+                    #log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
+                    # This makes the likelihood sum lower down much faster
+                    log_probs = torch.log_softmax(logits[:, -1, :], dim=1).detach().cpu().numpy()
                 self.predict_inference_ns += time.time_ns() - before_inference_ns
 
-                for j in range(current_batch):
+#                print(f"DEBUG, predict, log_probs = {log_probs}")
+
+                for batch_index in range(current_batch):
                     before_prep_vocab_ns = time.time_ns()
 
-                    sequence_text = batch_seq_text[j]
+                    # Rebuild the text from the sequence of subtoken IDs
+                    sequence_text = "".join([self.index_to_word_lower[x] for x in batch_sequences[batch_index][1:]])
+
                     vocab = []
                     extra_vocab = []
 
@@ -303,32 +303,35 @@ class CausalLanguageModel(LanguageModel):
                             tokenization = self._encode(context_lower[len(sequence_text):len(sequence_text) + i])
                             if len(tokenization) == 1:
                                 extra_vocab += tokenization[0],
+                    hypo_likelihood = batch_likelihoods[batch_index]
                     self.predict_prep_vocab_ns += time.time_ns() - before_prep_vocab_ns
 
                     # Create a list of token indexes that are a prefix of the target text.
                     # We go over all the integer IDs in the vocab and extra_vocab lists.
                     before_create_prefixes_ns = time.time_ns()
-                    for i in itertools.chain(vocab, extra_vocab):
+                    for token_id in itertools.chain(vocab, extra_vocab):
                         before_create_prefixes_top_ns = time.time_ns()
-
-                        hypo_str = sequence_text + self.index_to_word_lower[i]
-                        hypo_seq = batch_sequences[j].copy()
-                        hypo_seq += i,
-
-                        # Add the log prob of this token to the previous running total.
-                        # For some reason the float cast makes it run about twice as fast!
-                        likelihood = batch_likelihoods[j] + float(log_probs[j][i])
+                        hypo_seq = batch_sequences[batch_index].copy()
+                        hypo_seq += token_id,
                         self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
 
-                        # Require hypotheses extend beyond the existing typed context
-                        if len(hypo_str) > len(context):
+                        before_create_prefixes_likelihood_ns = time.time_ns()
+                        # Add the log prob of this token to the previous running total.
+                        # For some reason the float cast makes it run about twice as fast!
+                        # This line takes the majority of the time???
+                        likelihood = hypo_likelihood + log_probs[batch_index][token_id]
+                        self.predict_create_prefixes_likelihood_ns += time.time_ns() - before_create_prefixes_likelihood_ns
+
+                        # For a hypothesis to finish it must extend beyond the existing typed context
+                        if (len(sequence_text) + len(self.index_to_word_lower[token_id])) > len(context):
                             before_create_prefixes_longer_ns = time.time_ns()
-                            char_to_log_probs[hypo_str[target_pos]] += likelihood,
-                            self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
+                            # Add to this likelihood to the list for the character at the prediction position
+                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - len(sequence_text)]] += likelihood,
                             completed += 1
+                            self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
                             before_create_prefixes_shorter_ns = time.time_ns()
-                            hypo = (likelihood, hypo_seq, hypo_str)
+                            hypo = (likelihood, hypo_seq)
                             if len(next_hypos) < self.beam_width:
                                 # We are under the beam limit so just add it
                                 heapq.heappush(next_hypos, hypo)
@@ -336,8 +339,8 @@ class CausalLanguageModel(LanguageModel):
                                 # Replace the worst hypotheses with the new one
                                 heapq.heappushpop(next_hypos, hypo)
                             self.predict_create_prefixes_shorter_ns += time.time_ns() - before_create_prefixes_shorter_ns
-
                     self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
+
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
             next_hypos = []
@@ -390,6 +393,7 @@ class CausalLanguageModel(LanguageModel):
               f"prep_vocab {self.predict_prep_vocab_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_prefixes {self.predict_create_prefixes_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_prefixes_top {self.predict_create_prefixes_top_ns / self.predict_total_ns * 100.0:.3f} "
+              f"create_prefixes_likelihood {self.predict_create_prefixes_likelihood_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_prefixes_longer {self.predict_create_prefixes_longer_ns / self.predict_total_ns * 100.0:.3f} "
               f"create_prefixes_shorter {self.predict_create_prefixes_shorter_ns / self.predict_total_ns * 100.0:.3f} "
               f"end {self.predict_end_ns / self.predict_total_ns * 100.0:.3f}")
@@ -450,4 +454,5 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
+
 
