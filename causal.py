@@ -11,6 +11,7 @@ from scipy.special import logsumexp
 from scipy.special import softmax
 import time
 from collections import defaultdict
+from typing import Final
 
 
 class CausalLanguageModel(LanguageModel):
@@ -48,8 +49,9 @@ class CausalLanguageModel(LanguageModel):
         self.vocab_size = 0
         self.valid_vocab = []
         self.vocab = defaultdict(list)
-        self.index_to_word = {}
-        self.index_to_word_lower = {}
+        # Since subword token ids are integers, use a list instead of a dictionary
+        self.index_to_word = []
+        self.index_to_word_lower = []
         self.symbol_set_lower = None
         self.device = lm_device
         self.left_context = lm_left_context
@@ -91,8 +93,8 @@ class CausalLanguageModel(LanguageModel):
             # Create a map from the subword token integer ID to the mixed and lowercase string versions
             word = self.tokenizer.decode([i])
             word_lower = word.lower()
-            self.index_to_word[i] = word
-            self.index_to_word_lower[i] = word_lower
+            self.index_to_word += word,
+            self.index_to_word_lower += word_lower,
 
             # Check if all the characters in the subword token are in our valid symbol set
             valid = True
@@ -208,9 +210,9 @@ class CausalLanguageModel(LanguageModel):
             tokens = tokens[:-self.token_backoff]
 
         # Constant indexes for use with the hypotheses tuples
-        LOGP = 0
-        SEQ = 1
-        LEN = 2
+        LOGP: Final[int] = 0
+        SEQ: Final[int] = 1
+        LEN: Final[int] = 2
 
         # Our starting hypothesis that we'll be extending
         # Format is (log likelihood, token id sequence, text length)
@@ -254,7 +256,7 @@ class CausalLanguageModel(LanguageModel):
                 add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
 
                 # Add the current likelihoods with each subtoken's probability.
-                # Move it back to the CPU and convert to numpy since this makes it faster.
+                # Move it back to the CPU and convert to numpy since this makes it a lot faster to access.
                 new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
@@ -273,18 +275,20 @@ class CausalLanguageModel(LanguageModel):
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
-                for token_id in itertools.chain(vocab, extra_vocab):    # pprofile:
+                for token_id in itertools.chain(vocab, extra_vocab):
                     # For a hypothesis to finish it must extend beyond the existing typed context
-                    if (current[LEN] + len(self.index_to_word_lower[token_id])) > len(context): # pprofile:
-                        # Add this likelihood to the list for the character at the prediction position
-                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],  # pprofile:
+                    subword = self.index_to_word_lower[token_id]
+                    if (current[LEN] + len(subword)) > len(context):
+                        # Add this likelihood to the list for the character at the prediction position.
+                        # Tracking the list and doing logsumpexp later was faster than doing it for each add.
+                        char_to_log_probs[subword[target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                     else:
                         # Check we are actually going to use the new hypotheses before creating it
                         if len(next_hypos) < self.beam_width or new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
                             # Prepare a new extended sequence to add to the heap
                             hypo = (new_log_probs[current_index][token_id],
                                     current[SEQ].copy() + [token_id],
-                                    current[LEN] + len(self.index_to_word_lower[token_id]))
+                                    current[LEN] + len(subword))
                             if len(next_hypos) < self.beam_width:
                                 # If we are under the beam limit then just add it
                                 heapq.heappush(next_hypos, hypo)
@@ -310,17 +314,16 @@ class CausalLanguageModel(LanguageModel):
                 char_probs += logsumexp(char_to_log_probs[target_ch]),
             else:
                 char_probs += float("-inf"),
+
         # Normalize to a distribution that sums to 1
         char_probs = softmax(char_probs)
 
-        next_char_pred = Counter()
-
+        next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
             if ch is SPACE_CHAR:
                 next_char_pred[ch] = char_probs[i]
             else:
                 next_char_pred[ch.upper()] = char_probs[i]
-
         next_char_pred[BACKSPACE_CHAR] = 0.0
 
         end_ns = time.time_ns()
@@ -359,6 +362,7 @@ class CausalLanguageModel(LanguageModel):
         self.model.to(self.device)
 
         self.symbol_set_lower = []
+
         for ch in self.symbol_set:
             if ch is SPACE_CHAR:
                 self.symbol_set_lower.append(SPACE_CHAR)
