@@ -255,7 +255,7 @@ class CausalLanguageModel(LanguageModel):
                 rows = []
                 for batch_index in range(log_probs.size()[0]):
                     rows += torch.full(size=(1, log_probs.size()[1]), fill_value=current_hypos[batch_index][LOGP])
-                add_tensor = torch.vstack(rows)
+                add_tensor = torch.vstack(rows).to(self.device)
                 #print(f"DEBUG add_tensor {add_tensor} {add_tensor.size()}")
 
                 # Add the current likelihoods with each subtoken's probability
