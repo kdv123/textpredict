@@ -228,7 +228,11 @@ class CausalLanguageModel(LanguageModel):
         #print(f"DEBUG, predict, tokens = {tokens}")
 
         # Our starting hypothesis that we'll be extending
-        current_hypos = [(0.0, tokens)]
+        # Format is (log likelihood, token id sequence, text length)
+        start_length = 0
+        for x in tokens[1:]:
+            start_length += len(self.index_to_word_lower[x])
+        current_hypos = [(0.0, tokens, start_length)]
 
         # We use a priority queue to track the top hypotheses during the beam search.
         # For a beam of 8, empirical testing showed this was about the same amount
@@ -262,14 +266,16 @@ class CausalLanguageModel(LanguageModel):
                 batch_tensors = []
                 batch_sequences = []
                 batch_likelihoods = []
+                batch_text_lengths = []
 
 #                before_create_sequence_ns = time.time_ns()
                 while len(current_hypos) > 0 and current_batch < self.batch_size:
                     # Get the new sequence to work on
-                    (current_likelihood, sequence) = current_hypos.pop(0)
+                    (current_likelihood, sequence, text_length) = current_hypos.pop(0)
                     batch_tensors += torch.tensor(sequence),
                     batch_sequences += sequence,
                     batch_likelihoods += current_likelihood,
+                    batch_text_lengths += text_length,
                     current_batch += 1
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
 #                self.predict_create_sequence_ns += time.time_ns() - before_create_sequence_ns
@@ -288,19 +294,25 @@ class CausalLanguageModel(LanguageModel):
                     #before_prep_vocab_ns = time.time_ns()
 
                     # Rebuild the text from the sequence of subtoken IDs
-                    sequence_text = "".join([self.index_to_word_lower[x] for x in batch_sequences[batch_index][1:]])
+                    #sequence_text = "".join([self.index_to_word_lower[x] for x in batch_sequences[batch_index][1:]])
+
+                    # We only need to know the length of the text sequence in the hypothesis.
+                    #sequence_text_len = 0
+                    #for x in batch_sequences[batch_index][1:]:
+                    #    sequence_text_len += len(self.index_to_word_lower[x])
+                    sequence_text_len = batch_text_lengths[batch_index]
 
                     vocab = []
                     extra_vocab = []
 
-                    remaining_context = converted_context_lower[len(sequence_text):]
+                    remaining_context = converted_context_lower[sequence_text_len:]
                     if len(remaining_context) == 0:
                         vocab = self.valid_vocab
                     else:
                         if remaining_context in self.vocab:
                             vocab = self.vocab[remaining_context]
                         for i in range(1, len(remaining_context)):
-                            tokenization = self._encode(context_lower[len(sequence_text):len(sequence_text) + i])
+                            tokenization = self._encode(context_lower[sequence_text_len:sequence_text_len + i])
                             if len(tokenization) == 1:
                                 extra_vocab += tokenization[0],
                     hypo_likelihood = batch_likelihoods[batch_index]
@@ -311,8 +323,6 @@ class CausalLanguageModel(LanguageModel):
                     #before_create_prefixes_ns = time.time_ns()
                     for token_id in itertools.chain(vocab, extra_vocab):
                         #before_create_prefixes_top_ns = time.time_ns()
-                        hypo_seq = batch_sequences[batch_index].copy()
-                        hypo_seq += token_id,
                         #self.predict_create_prefixes_top_ns += time.time_ns() - before_create_prefixes_top_ns
 
                         #before_create_prefixes_likelihood_ns = time.time_ns()
@@ -323,21 +333,27 @@ class CausalLanguageModel(LanguageModel):
                         #self.predict_create_prefixes_likelihood_ns += time.time_ns() - before_create_prefixes_likelihood_ns
 
                         # For a hypothesis to finish it must extend beyond the existing typed context
-                        if (len(sequence_text) + len(self.index_to_word_lower[token_id])) > len(context):
+                        if (sequence_text_len + len(self.index_to_word_lower[token_id])) > len(context):
                             #before_create_prefixes_longer_ns = time.time_ns()
                             # Add to this likelihood to the list for the character at the prediction position
-                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - len(sequence_text)]] += likelihood,
+                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - sequence_text_len]] += likelihood,
                             #completed += 1
                             #self.predict_create_prefixes_longer_ns += time.time_ns() - before_create_prefixes_longer_ns
                         else:
                             #before_create_prefixes_shorter_ns = time.time_ns()
-                            hypo = (likelihood, hypo_seq)
-                            if len(next_hypos) < self.beam_width:
-                                # We are under the beam limit so just add it
-                                heapq.heappush(next_hypos, hypo)
-                            else:
-                                # Replace the worst hypotheses with the new one
-                                heapq.heappushpop(next_hypos, hypo)
+                            # Check we are actually going to use the new hypotheses before creating it
+                            if len(next_hypos) < self.beam_width or likelihood > next_hypos[0][0]:
+                                # Prepare a new extended sequence to add to the heap
+                                hypo_seq = batch_sequences[batch_index].copy()
+                                hypo_seq += token_id,
+                                hypo = (likelihood, hypo_seq, sequence_text_len + len(self.index_to_word_lower[token_id]))
+                                if len(next_hypos) < self.beam_width:
+                                    # If we are under the beam limit then just add it
+                                    heapq.heappush(next_hypos, hypo)
+                                else:
+                                    # Or replace the worst hypotheses with the new one
+                                    heapq.heappushpop(next_hypos, hypo)
+
                             #self.predict_create_prefixes_shorter_ns += time.time_ns() - before_create_prefixes_shorter_ns
                    #self.predict_create_prefixes_ns += time.time_ns() - before_create_prefixes_ns
 
