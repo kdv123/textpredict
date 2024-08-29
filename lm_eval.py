@@ -45,7 +45,6 @@ if __name__ == "__main__":
     parser.add_argument('--stats-extra', help="extra string to write to stats file as first column")
     parser.add_argument("--phrase-limit", type=int, help="max phrases to evaluate")
     parser.add_argument("--beam-width", type=int, default=8, help="search beam width")
-    parser.add_argument("--batch-size", type=int, default=8, help="inference batch size")
     parser.add_argument("--token-backoff", type=int, default=-1, help="tokens removed during search, -1=last space")
     parser.add_argument('--ppl-file', help="output sentence and ppl to a file")
     parser.add_argument('--symbol-file', help="output symbol log probs to a file")
@@ -135,7 +134,6 @@ if __name__ == "__main__":
                                  lm_path=args.model_dir,
                                  lm_left_context=args.left_context,
                                  beam_width=args.beam_width,
-                                 batch_size=args.batch_size,
                                  token_backoff=args.token_backoff,
                                  fp16=args.fp16,
                                  mixed_case_context=args.mixed_case_context,
@@ -155,7 +153,6 @@ if __name__ == "__main__":
                                              "lm_path": args.model_dir,
                                              "lm_left_context": args.left_context,
                                              "beam_width": args.beam_width,
-                                             "batch_size": args.batch_size,
                                              "token_backoff": args.token_backoff,
                                              "fp16": args.fp16,
                                              "mixed_case_context": args.mixed_case_context,
