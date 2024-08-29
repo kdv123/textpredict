@@ -247,7 +247,24 @@ class CausalLanguageModel(LanguageModel):
                 logits = self.model(tokens_tensor).logits
                 #log_probs = torch.log_softmax(logits[:, -1, :], dim=1).to("cpu")
                 # This makes the likelihood sum lower down much faster
-                log_probs = torch.log_softmax(logits[:, -1, :], dim=1).detach().cpu().numpy()
+#                print(f"DEBUG {torch.log_softmax(logits[:, -1, :], dim=1).size()}")
+                # Compute the probabilities from the logits
+                log_probs = torch.log_softmax(logits[:, -1, :], dim=1)
+
+                # Create a big 2D tensor where each row is that hypothesis' current likelihood
+                rows = []
+                for batch_index in range(log_probs.size()[0]):
+                    rows += torch.full(size=(1, log_probs.size()[1]), fill_value=current_hypos[batch_index][LOGP])
+                add_tensor = torch.vstack(rows)
+                #print(f"DEBUG add_tensor {add_tensor} {add_tensor.size()}")
+
+                # Add the current likelihoods with each subtoken's probability
+                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
+
+                #print(f"DEBUG new_log_probs {new_log_probs} {new_log_probs.size()}")
+                # Old way:
+                #log_probs = torch.log_softmax(logits[:, -1, :], dim=1).detach().cpu().numpy()
+
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             for current_index, current in enumerate(current_hypos):
@@ -269,7 +286,8 @@ class CausalLanguageModel(LanguageModel):
                     # Add the log prob of this token to the previous running total.
                     # For some reason the float cast makes it run about twice as fast!
                     # This line takes the majority of the time???
-                    likelihood = current[LOGP] + log_probs[current_index][token_id]
+                    #likelihood = current[LOGP] + log_probs[current_index][token_id]
+                    likelihood = new_log_probs[current_index][token_id]
 
                     # For a hypothesis to finish it must extend beyond the existing typed context
                     if (current[LEN] + len(self.index_to_word_lower[token_id])) > len(context):
