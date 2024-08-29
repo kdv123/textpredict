@@ -261,11 +261,12 @@ class CausalLanguageModel(LanguageModel):
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             for current_index, current in enumerate(current_hypos):
-                vocab = self.valid_vocab
+                vocab = []
                 extra_vocab = []
                 remaining_context = converted_context_lower[current[LEN]:]
-                # The subword tokens we need to check are only limited once there is existing text that must match
-                if len(remaining_context) > 0:
+                if len(remaining_context) == 0:
+                    vocab = self.valid_vocab
+                else:
                     if remaining_context in self.vocab:
                         vocab = self.vocab[remaining_context]
                     for i in range(1, len(remaining_context)):
