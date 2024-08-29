@@ -244,17 +244,18 @@ class CausalLanguageModel(LanguageModel):
             before_inference_ns = time.time_ns()
             # Ask the LLM to predict tokens that come after our current set of hypotheses
             with torch.no_grad():
-                logits = self.model(tokens_tensor).logits
                 # Compute the probabilities from the logits
-                log_probs = torch.log_softmax(logits[:, -1, :], dim=1)
-                # Create a big 2D tensor where each row is that hypothesis' current likelihood
-                rows = []
-                for batch_index in range(log_probs.size()[0]):
-                    rows += torch.full(size=(1, log_probs.size()[1]), fill_value=current_hypos[batch_index][LOGP])
-                add_tensor = torch.vstack(rows).to(self.device)
-                # Add the current likelihoods with each subtoken's probability
-                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
+                log_probs = torch.log_softmax(self.model(tokens_tensor).logits[:, -1, :], dim=1)
 
+                # Create a big 2D tensor where each row is that hypothesis' current likelihood.
+                # First create a list of just the hypotheses' likelihoods.
+                # Then reshape to be a column vector.
+                # Then duplicate the column based on the number of subword tokens in the LLM.
+                add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
+
+                # Add the current likelihoods with each subtoken's probability.
+                # Move it back to the CPU and convert to numpy since this makes it faster.
+                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             for current_index, current in enumerate(current_hypos):
