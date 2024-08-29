@@ -273,29 +273,25 @@ class CausalLanguageModel(LanguageModel):
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
-                for token_id in itertools.chain(vocab, extra_vocab):
-                    # Add the log prob of this token to the previous running total.
-                    # For some reason the float cast makes it run about twice as fast!
-                    # This line takes the majority of the time???
-                    likelihood = new_log_probs[current_index][token_id]
-
+                for token_id in itertools.chain(vocab, extra_vocab):    # pprofile:
                     # For a hypothesis to finish it must extend beyond the existing typed context
-                    if (current[LEN] + len(self.index_to_word_lower[token_id])) > len(context):
-                        # Add to this likelihood to the list for the character at the prediction position
-                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += likelihood,
+                    if (current[LEN] + len(self.index_to_word_lower[token_id])) > len(context): # pprofile:
+                        # Add this likelihood to the list for the character at the prediction position
+                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],  # pprofile:
                     else:
                         # Check we are actually going to use the new hypotheses before creating it
-                        if len(next_hypos) < self.beam_width or likelihood > next_hypos[0][LOGP]:
+                        if len(next_hypos) < self.beam_width or new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
                             # Prepare a new extended sequence to add to the heap
-                            hypo_seq = current[SEQ].copy()
-                            hypo_seq += token_id,
-                            hypo = (likelihood, hypo_seq, current[LEN] + len(self.index_to_word_lower[token_id]))
+                            hypo = (new_log_probs[current_index][token_id],
+                                    current[SEQ].copy() + [token_id],
+                                    current[LEN] + len(self.index_to_word_lower[token_id]))
                             if len(next_hypos) < self.beam_width:
                                 # If we are under the beam limit then just add it
                                 heapq.heappush(next_hypos, hypo)
                             else:
                                 # Or replace the worst hypotheses with the new one
                                 heapq.heappushpop(next_hypos, hypo)
+
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
             next_hypos = []
@@ -373,6 +369,15 @@ class CausalLanguageModel(LanguageModel):
 
         self._build_vocab()
 
+    def get_num_parameters(self) -> int:
+        """
+            Find out how many parameters the loaded model has
+        Args:
+        Response:
+            Integer number of parameters in the transformer model
+        """
+        return sum(p.numel() for p in self.model.parameters())
+
     def state_update(self, evidence: List[str]) -> List[Tuple]:
         """
             Wrapper method that takes in evidence text, and output probability distribution
@@ -386,14 +391,7 @@ class CausalLanguageModel(LanguageModel):
 
         return next_char_pred
 
-    def get_num_parameters(self) -> int:
-        """
-            Find out how many parameters the loaded model has
-        Args:
-        Response:
-            Integer number of parameters in the transformer model
-        """
-        return sum(p.numel() for p in self.model.parameters())
+
 
 
 
