@@ -214,12 +214,15 @@ class CausalLanguageModel(LanguageModel):
         SEQ: Final[int] = 1
         LEN: Final[int] = 2
 
-        # Our starting hypothesis that we'll be extending
-        # Format is (log likelihood, token id sequence, text length)
+        # Our starting hypothesis that we'll be extending.
+        # Format is (log likelihood, token id sequence, text length).
+        # Note: we only include tokens after any in left context.
         start_length = 0
-        for x in tokens[1:]:
+        for x in tokens[len(self.left_context_tokens):]:
             start_length += len(self.index_to_word_lower[x])
         current_hypos = [(0.0, tokens, start_length)]
+
+#        print(f"DEBUG current_hypos {current_hypos}, left {self.left_context_tokens}")
 
         # We use a priority queue to track the top hypotheses during the beam search.
         # For a beam of 8, empirical testing showed this was about the same amount
