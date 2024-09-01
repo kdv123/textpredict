@@ -395,8 +395,3 @@ class CausalLanguageModel(LanguageModel):
         next_char_pred = self.predict(evidence)
 
         return next_char_pred
-
-
-
-
-
