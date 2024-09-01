@@ -85,8 +85,6 @@ class CausalByteLanguageModel(LanguageModel):
         # List of empty lists
         self.result_to_vocab_indexes = [ [] for _ in range(len(self.symbol_set_lower)) ]
 
-        #print(f"DEBUG symbol_set_lower {self.symbol_set_lower}")
-
         for i in range(self.vocab_size):
             word = self.tokenizer.decode([i])
             #print(f"DEBUG vocab {i} '{word}'")
@@ -103,8 +101,6 @@ class CausalByteLanguageModel(LanguageModel):
             except ValueError:
                 pass
 
-        #print(f'DEBUG map {self.result_to_vocab_indexes}')
-
         # Get the index we use for the start or end pseudo-word
         if self.left_context == "":
             self.left_context = "</s>"
@@ -114,7 +110,6 @@ class CausalByteLanguageModel(LanguageModel):
         print(f"CausalByte: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
 
     def _encode(self, text: str) -> List[int]:
-        #print(f"DEBUG _encode '{text}'")
         tokens = self.tokenizer.encode(text)
         if len(tokens) > 1 and self.model_name.startswith("facebook/opt"):
             # Some models always add </s> at start which we don't want since we may have our own left context
@@ -168,15 +163,10 @@ class CausalByteLanguageModel(LanguageModel):
         if len(context) > 0:
             tokens.extend(self._encode(context))
 
-        #print(f"DEBUG tokens {tokens}")
-
         tensor = torch.tensor([tokens]).to(self.device)
         with torch.no_grad():
             logits = self.model(tensor).logits # Shape is (1, 1, 384)
-            log_probs = torch.log_softmax(logits[-1, -1, :], dim=0).to("cpu")
-
-       #print(f"DEBUG: logits {logits} {logits.shape}")
-       # print(f"DEBUG: log_probs {log_probs} {log_probs.shape}")
+            log_probs = torch.log_softmax(logits[-1, -1, :], dim=0).detach().cpu().numpy()
 
         # Create a simple list with the probabilities of all the characters we need to return
         char_probs = []
@@ -197,10 +187,9 @@ class CausalByteLanguageModel(LanguageModel):
 
         # Normalize to a distribution that sums to 1
         char_probs = softmax(char_probs)
-        #print(f"DEBUG after {char_probs} {sum(char_probs)}")
 
         # Now construct the return dictionary that maps the character to its probability
-        next_char_pred = Counter()
+        next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
             if ch is SPACE_CHAR:
                 next_char_pred[ch] = char_probs[i]
@@ -209,12 +198,6 @@ class CausalByteLanguageModel(LanguageModel):
         next_char_pred[BACKSPACE_CHAR] = 0.0
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
-
-        #char_probs = softmax(char_probs)
-        #next_char_pred = Counter()
-        #for i, ch in enumerate(self.symbol_set):
-        #    next_char_pred[ch] = char_probs[i]
-        #return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
     def update(self) -> None:
         """Update the model state"""
