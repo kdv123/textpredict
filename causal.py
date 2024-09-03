@@ -272,28 +272,30 @@ class CausalLanguageModel(LanguageModel):
                         if len(tokenization) == 1:
                             extra_vocab += tokenization[0],
 
+                # The below code takes the most time, results from pprofile on 5 phrases on an A100 GPU:
+                #
+
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
                 for token_id in itertools.chain(vocab, extra_vocab):
                     # For a hypothesis to finish it must extend beyond the existing typed context
-                    subword = self.index_to_word_lower[token_id]
-                    if (current[LEN] + len(subword)) > len(context):
+                    subword_len = len(self.index_to_word_lower[token_id])
+                    if (current[LEN] + subword_len) > len(context):
                         # Add this likelihood to the list for the character at the prediction position.
                         # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-                        char_to_log_probs[subword[target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                    else:
-                        # Check we are actually going to use the new hypotheses before creating it
-                        if len(next_hypos) < self.beam_width or new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
-                            # Prepare a new extended sequence to add to the heap
-                            hypo = (new_log_probs[current_index][token_id],
-                                    current[SEQ].copy() + [token_id],
-                                    current[LEN] + len(subword))
-                            if len(next_hypos) < self.beam_width:
-                                # If we are under the beam limit then just add it
-                                heapq.heappush(next_hypos, hypo)
-                            else:
-                                # Or replace the worst hypotheses with the new one
-                                heapq.heappushpop(next_hypos, hypo)
+                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+                    elif len(next_hypos) < self.beam_width:
+                        # If we are under the beam limit then just add it
+                        heapq.heappush(next_hypos,
+                                       (new_log_probs[current_index][token_id],
+                                        current[SEQ] + [token_id],
+                                        current[LEN] + subword_len))
+                    elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
+                        # Or replace the worst hypotheses with the new one
+                        heapq.heappushpop(next_hypos,
+                                          (new_log_probs[current_index][token_id],
+                                           current[SEQ] + [token_id],
+                                           current[LEN] + subword_len))
 
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
