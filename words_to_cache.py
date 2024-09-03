@@ -237,7 +237,7 @@ if __name__ == "__main__":
     prefix_count = 0
     for word in words:
         for i in range(1, len(word) + 1):
-            prefix = word[:i]
+            prefix = " " + word[:i]
             prefix_count += 1
             print(f"prefix {prefix}")
             generating = list(sequences_generating(text = prefix))

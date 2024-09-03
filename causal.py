@@ -38,7 +38,6 @@ class CausalLanguageModel(LanguageModel):
             lm_device          - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context    - text to condition start of sentence on
             beam_width         - how many hypotheses to keep during the search
-            token_backoff      - how many tokens to remove prior to search extension, -1 = previous space
             fp16               - convert model to fp16 to save memory/compute on CUDA
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
@@ -66,9 +65,6 @@ class CausalLanguageModel(LanguageModel):
 
         # Parameters for the search
         self.beam_width = beam_width
-
-        # How much to backoff from the current tokenization
-        self.token_backoff = token_backoff
 
         # Simple heuristic to correct case in the LM context
         self.simple_upper_words = {"i": "I",
@@ -143,6 +139,14 @@ class CausalLanguageModel(LanguageModel):
 
         return tokens
 
+    def _sequence_string(self, sequence: List[int]) -> str:
+        """
+        Convert a sequence of subword token IDs into a string with each token in ()'s
+        :param sequence: List of subword token IDs
+        :return: String
+        """
+        return "".join([f"({self.index_to_word[x]})" for x in sequence])
+
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
@@ -184,30 +188,17 @@ class CausalLanguageModel(LanguageModel):
         # Index in the hypothesis string that is the next character after our context
         target_pos = len(context_lower)
 
-        # Remove token_backoff tokens from the end of the context
-        # If token_backoff is -1 or goes beyond a word boundary, then
-        # search from the last space character in the context
-        # If no space, then from the very beginning
-        tokens = self._encode(context_lower)
-
         # Look for the last space in the context, or -1 if no begin_text in context yet
         pos = context_lower.rfind(" ")
-        truncated_tokens = []
-        truncated_tokens.extend(self.left_context_tokens)
+        tokens = []
+        tokens.extend(self.left_context_tokens)
         if pos >= 0:
             # Optionally, we condition on upper and lower case left context
             if self.mixed_case_context:
                 truncated_context = context[0:pos]
             else:
                 truncated_context = context_lower[0:pos]
-            truncated_tokens.extend(self._encode(truncated_context))
-
-        # If token_backoff is -1, then we backoff to the last space.
-        # Otherwise, we use a fixed number looking backwards.
-        if self.token_backoff == -1 or len(tokens) - self.token_backoff < len(truncated_tokens):
-            tokens = truncated_tokens
-        else:
-            tokens = tokens[:-self.token_backoff]
+            tokens.extend(self._encode(truncated_context))
 
         # Constant indexes for use with the hypotheses tuples
         LOGP: Final[int] = 0
