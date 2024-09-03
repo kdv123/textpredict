@@ -256,23 +256,37 @@ class CausalLanguageModel(LanguageModel):
                 add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
 
                 # Add the current likelihoods with each subtoken's probability.
-                # Move it back to the CPU and convert to numpy since this makes it a lot faster to access.
+                # Move it back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
                 new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             for current_index, current in enumerate(current_hypos):
                 vocab = []
                 extra_vocab = []
+                # Extending this hypothesis must match the remaining text
                 remaining_context = converted_context_lower[current[LEN]:]
                 if len(remaining_context) == 0:
+                    # There is no remaining context thus all subword tokens that are valid under our symbol set
+                    # should be considered when computing the probability of the next character.
                     vocab = self.valid_vocab
                 else:
                     if remaining_context in self.vocab:
+                        # We have a list of subword tokens that match the remaining text.
+                        # They could be the same length as the remaining text or longer and have the remaining text as a prefix.
                         vocab = self.vocab[remaining_context]
+
+                    # We may need to use a subword token that doesn't completely consume the remaining text.
+                    # Find these by tokenizing all possible lengths of text starting from the current position.
                     for i in range(1, len(remaining_context)):
                         tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
-                        if len(tokenization) == 1:
+                        # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
+#                        if len(tokenization) == 1:
+#                            extra_vocab += tokenization[0],
+                        # TEMP: checking this doesn't change the result
+                        if tokenization[0] not in extra_vocab:
                             extra_vocab += tokenization[0],
+                        else:
+                            print(f"ERROR: {tokenization[0]} was already in {extra_vocab} for '{remaining_context}'")
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
