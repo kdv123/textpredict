@@ -222,8 +222,6 @@ class CausalLanguageModel(LanguageModel):
             start_length += len(self.index_to_word_lower[x])
         current_hypos = [(0.0, tokens, start_length)]
 
-#        print(f"DEBUG current_hypos {current_hypos}, left {self.left_context_tokens}")
-
         # We use a priority queue to track the top hypotheses during the beam search.
         # For a beam of 8, empirical testing showed this was about the same amount
         # of time as a simpler list that used a linear search to replace when full.
@@ -280,16 +278,8 @@ class CausalLanguageModel(LanguageModel):
                     for i in range(1, len(remaining_context)):
                         tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
                         # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
-#                        if len(tokenization) == 1:
-#                            extra_vocab += tokenization[0],
-                        # TEMP: checking this doesn't change the result
-                        if tokenization[0] not in extra_vocab:
-                            if tokenization[0] not in vocab:
-                                extra_vocab += tokenization[0],
-                            else:
-                                print(f"ERROR: {tokenization[0]} was already in vocab for '{remaining_context}'")
-                        else:
-                            print(f"ERROR: {tokenization[0]} was already in extras_vocab {extra_vocab} for '{remaining_context}'")
+                        if len(tokenization) == 1:
+                            extra_vocab += tokenization[0],
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
