@@ -284,9 +284,12 @@ class CausalLanguageModel(LanguageModel):
 #                            extra_vocab += tokenization[0],
                         # TEMP: checking this doesn't change the result
                         if tokenization[0] not in extra_vocab:
-                            extra_vocab += tokenization[0],
+                            if tokenization[0] not in vocab:
+                                extra_vocab += tokenization[0],
+                            else:
+                                print(f"ERROR: {tokenization[0]} was already in vocab for '{remaining_context}'")
                         else:
-                            print(f"ERROR: {tokenization[0]} was already in {extra_vocab} for '{remaining_context}'")
+                            print(f"ERROR: {tokenization[0]} was already in extras_vocab {extra_vocab} for '{remaining_context}'")
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
