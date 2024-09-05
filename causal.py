@@ -236,6 +236,9 @@ class CausalLanguageModel(LanguageModel):
         # Each iteration of this while loop extends hypotheses by all valid tokens.
         # We only keep at most self.beam_width hypotheses in the valid heap.
         while len(current_hypos) > 0:
+            # We'll explore hypothesis in order from most probable to least.
+            current_hypos.sort(reverse=True)
+
             # Work on the hypotheses from the last round of extension.
             # Create the torch tensor for the inference with a row for each hypothesis.
             tokens_tensor = torch.tensor([x[SEQ] for x in current_hypos]).reshape(len(current_hypos), -1).to(self.device)
