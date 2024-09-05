@@ -76,6 +76,8 @@ class CausalLanguageModel(LanguageModel):
         # Track how much time spent in different parts of the predict function
         self.predict_total_ns = 0
         self.predict_inference_ns = 0
+        self.predict_prefix_len_to_ns = defaultdict(int)
+        self.predict_prefix_len_to_count = defaultdict(int)
 
         self.load()
 
@@ -188,6 +190,9 @@ class CausalLanguageModel(LanguageModel):
         # Index in the hypothesis string that is the next character after our context
         target_pos = len(context_lower)
 
+        # For stats purposes track length of the prefix we are extending from space to match
+        prefix_len = target_pos
+
         # Look for the last space in the context, or -1 if no begin_text in context yet
         pos = context_lower.rfind(" ")
         tokens = []
@@ -199,6 +204,9 @@ class CausalLanguageModel(LanguageModel):
             else:
                 truncated_context = context_lower[0:pos]
             tokens.extend(self._encode(truncated_context))
+            prefix_len -= pos
+
+        #print(f"DEBUG, {context_lower} pos {pos}, prefix_len {prefix_len}")
 
         # Constant indexes for use with the hypotheses tuples
         LOGP: Final[int] = 0
@@ -274,6 +282,13 @@ class CausalLanguageModel(LanguageModel):
 
                 # The below code takes the most time, results from pprofile on 5 phrases on an A100 GPU:
                 #
+                #    280| 132395799|      582.621|   4.4006e-06| 21.88%|                for token_id in itertools.chain(vocab, extra_vocab):
+                #    281|         0|            0|            0|  0.00%|                    # For a hypothesis to finish it must extend beyond the existing typed context
+                #    282| 132390935|      606.541|  4.58144e-06| 22.78%|                    subword_len = len(self.index_to_word_lower[token_id])
+                #    283| 132390935|      602.237|  4.54893e-06| 22.61%|                    if (current[LEN] + subword_len) > len(context):
+                #    284|         0|            0|            0|  0.00%|                        # Add this likelihood to the list for the character at the prediction position.
+                #    285|         0|            0|            0|  0.00%|                        # Tracking the list and doing logsumpexp later was faster than doing it for each add.
+                #    286| 132384604|      672.474|   5.0797e-06| 25.25%|                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
@@ -330,6 +345,10 @@ class CausalLanguageModel(LanguageModel):
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
 
+        # Track timing of how long each size prefix takes to compute
+        self.predict_prefix_len_to_count[prefix_len] += 1
+        self.predict_prefix_len_to_ns[prefix_len] += end_ns - start_ns
+
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
     def dump_predict_times(self) -> None:
@@ -337,6 +356,11 @@ class CausalLanguageModel(LanguageModel):
         if self.predict_total_ns > 0:
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
+        for prefix_len in sorted(self.predict_prefix_len_to_count.keys()):
+            print(f"Predict len \t{prefix_len}\t"
+                  f"{self.predict_prefix_len_to_count[prefix_len]}\t"
+                  f"{self.predict_prefix_len_to_ns[prefix_len]}\t"
+                  f"{self.predict_prefix_len_to_ns[prefix_len] / self.predict_prefix_len_to_count[prefix_len] / 1e+9: .6f} ")
 
     def update(self) -> None:
         """Update the model state"""
