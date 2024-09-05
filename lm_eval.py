@@ -54,6 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="mixture weight for ngram in type 6 mix")
     parser.add_argument('--srilm-file', help="output SRILM debug 2 log file")
     parser.add_argument("--skip-norm", help="skip normalization over symbol set for KenLM model", action="store_true", default=False)
+    parser.add_argument("--max-completed", type=int, help="stop search once we complete this many hypotheses")
 
     args = parser.parse_args()
 
@@ -135,7 +136,8 @@ if __name__ == "__main__":
                                  beam_width=args.beam_width,
                                  fp16=args.fp16,
                                  mixed_case_context=args.mixed_case_context,
-                                 case_simple=args.case_simple)
+                                 case_simple=args.case_simple,
+                                 max_completed=args.max_completed)
     elif model == 5:
         lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
                                   lang_model_name=args.model_name,

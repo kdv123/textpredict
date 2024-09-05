@@ -24,10 +24,10 @@ class CausalLanguageModel(LanguageModel):
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
                  beam_width: int = 8,
-                 token_backoff: int = -1,
                  fp16: bool = False,
-                 mixed_case_context = False,
-                 case_simple = False,
+                 mixed_case_context: bool = False,
+                 case_simple: bool = False,
+                 max_completed: int = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -41,6 +41,7 @@ class CausalLanguageModel(LanguageModel):
             fp16               - convert model to fp16 to save memory/compute on CUDA
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
+            max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -57,6 +58,7 @@ class CausalLanguageModel(LanguageModel):
         self.fp16 = fp16
         self.mixed_case_context = mixed_case_context
         self.case_simple = case_simple
+        self.max_completed = max_completed
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -76,8 +78,9 @@ class CausalLanguageModel(LanguageModel):
         # Track how much time spent in different parts of the predict function
         self.predict_total_ns = 0
         self.predict_inference_ns = 0
-        self.predict_prefix_len_to_ns = defaultdict(int)
-        self.predict_prefix_len_to_count = defaultdict(int)
+        #self.predict_prefix_len_to_ns = defaultdict(int)
+        #self.predict_prefix_len_to_count = defaultdict(int)
+        #self.predict_prefix_len_to_completed = defaultdict(int)
 
         self.load()
 
@@ -191,7 +194,7 @@ class CausalLanguageModel(LanguageModel):
         target_pos = len(context_lower)
 
         # For stats purposes track length of the prefix we are extending from space to match
-        prefix_len = target_pos
+        # prefix_len = target_pos
 
         # Look for the last space in the context, or -1 if no begin_text in context yet
         pos = context_lower.rfind(" ")
@@ -204,7 +207,7 @@ class CausalLanguageModel(LanguageModel):
             else:
                 truncated_context = context_lower[0:pos]
             tokens.extend(self._encode(truncated_context))
-            prefix_len -= pos
+            #prefix_len -= pos
 
         #print(f"DEBUG, {context_lower} pos {pos}, prefix_len {prefix_len}")
 
@@ -232,11 +235,18 @@ class CausalLanguageModel(LanguageModel):
         # Add new extended hypotheses to this heap
         next_hypos = []
 
+        # Tracks count of completed hypotheses
+        completed = 0
+
         # Start a beam search forward from the backed off token sequence.
         # Each iteration of this while loop extends hypotheses by all valid tokens.
         # We only keep at most self.beam_width hypotheses in the valid heap.
+        # Stop extending search once we reach our max completed target.
         while len(current_hypos) > 0:
+
             # We'll explore hypothesis in order from most probable to least.
+            # This has little impact on how long it takes since this is only sorting a small number of things.
+            # But it is important with max_completed pruning since we want to bias for completing high probability things.
             current_hypos.sort(reverse=True)
 
             # Work on the hypotheses from the last round of extension.
@@ -302,6 +312,12 @@ class CausalLanguageModel(LanguageModel):
                         # Add this likelihood to the list for the character at the prediction position.
                         # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                         char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+                        #self.predict_prefix_len_to_completed[prefix_len] += 1
+                        completed += 1
+                        # Abandon the search as soon as we hit the target number of completions.
+                        # Note: this means we may not get to everything in this set of vocab, extra_vocab.
+                        #if self.max_completed and completed >= self.max_completed:
+                        #    break
                     elif len(next_hypos) < self.beam_width:
                         # If we are under the beam limit then just add it
                         heapq.heappush(next_hypos,
@@ -314,6 +330,18 @@ class CausalLanguageModel(LanguageModel):
                                           (new_log_probs[current_index][token_id],
                                            current[SEQ] + [token_id],
                                            current[LEN] + subword_len))
+
+                if self.max_completed and completed >= self.max_completed:
+                    break
+                # Check if we need to bail out early if we hit our maximum quota of completed hypotheses
+                #if self.max_completed:
+                #    # To avoid incrementing an integer in the performance bottleneck part of the for loop, we'll compute
+                #    # based on the char_to_log_probs dictionary after each loop completes.
+                #    completed = 0
+                #    for probs in char_to_log_probs.values():
+                #        completed += len(probs)
+                #    if completed >= self.max_completed:
+                #        break
 
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
@@ -349,8 +377,9 @@ class CausalLanguageModel(LanguageModel):
         self.predict_total_ns += end_ns - start_ns
 
         # Track timing of how long each size prefix takes to compute
-        self.predict_prefix_len_to_count[prefix_len] += 1
-        self.predict_prefix_len_to_ns[prefix_len] += end_ns - start_ns
+        #self.predict_prefix_len_to_count[prefix_len] += 1
+        #self.predict_prefix_len_to_ns[prefix_len] += end_ns - start_ns
+        #print(f"DEBUG, completed = {completed}")
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
@@ -359,11 +388,15 @@ class CausalLanguageModel(LanguageModel):
         if self.predict_total_ns > 0:
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
-        for prefix_len in sorted(self.predict_prefix_len_to_count.keys()):
-            print(f"Predict len \t{prefix_len}\t"
-                  f"{self.predict_prefix_len_to_count[prefix_len]}\t"
-                  f"{self.predict_prefix_len_to_ns[prefix_len]}\t"
-                  f"{self.predict_prefix_len_to_ns[prefix_len] / self.predict_prefix_len_to_count[prefix_len] / 1e+9: .6f} ")
+#        for prefix_len in sorted(self.predict_prefix_len_to_count.keys()):
+#            avg_time_secs = -1.0
+#            if self.predict_prefix_len_to_count[prefix_len] > 0:
+#                avg_time_secs = self.predict_prefix_len_to_ns[prefix_len] / self.predict_prefix_len_to_count[prefix_len] / 1e+9
+#            print(f"Predict len \t{prefix_len}\t"
+#                  f"{self.predict_prefix_len_to_count[prefix_len]}\t"
+#                  f"{self.predict_prefix_len_to_ns[prefix_len]}\t"
+#                  f"{avg_time_secs: .6f}\t"
+#                  f"{self.predict_prefix_len_to_completed[prefix_len]}")
 
     def update(self) -> None:
         """Update the model state"""
