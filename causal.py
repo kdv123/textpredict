@@ -23,7 +23,7 @@ class CausalLanguageModel(LanguageModel):
                  lm_path: str = None,
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
-                 beam_width: int = 8,
+                 beam_width: int = None,
                  fp16: bool = False,
                  mixed_case_context: bool = False,
                  case_simple: bool = False,
@@ -37,7 +37,7 @@ class CausalLanguageModel(LanguageModel):
             lm_path            - load fine-tuned model from specified directory
             lm_device          - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context    - text to condition start of sentence on
-            beam_width         - how many hypotheses to keep during the search
+            beam_width         - how many hypotheses to keep during the search, None=off
             fp16               - convert model to fp16 to save memory/compute on CUDA
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
@@ -78,9 +78,6 @@ class CausalLanguageModel(LanguageModel):
         # Track how much time spent in different parts of the predict function
         self.predict_total_ns = 0
         self.predict_inference_ns = 0
-        #self.predict_prefix_len_to_ns = defaultdict(int)
-        #self.predict_prefix_len_to_count = defaultdict(int)
-        #self.predict_prefix_len_to_completed = defaultdict(int)
 
         self.load()
 
@@ -318,7 +315,7 @@ class CausalLanguageModel(LanguageModel):
                         # Note: this means we may not get to everything in this set of vocab, extra_vocab.
                         #if self.max_completed and completed >= self.max_completed:
                         #    break
-                    elif len(next_hypos) < self.beam_width:
+                    elif not self.beam_width or len(next_hypos) < self.beam_width:
                         # If we are under the beam limit then just add it
                         heapq.heappush(next_hypos,
                                        (new_log_probs[current_index][token_id],
@@ -376,11 +373,6 @@ class CausalLanguageModel(LanguageModel):
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
 
-        # Track timing of how long each size prefix takes to compute
-        #self.predict_prefix_len_to_count[prefix_len] += 1
-        #self.predict_prefix_len_to_ns[prefix_len] += end_ns - start_ns
-        #print(f"DEBUG, completed = {completed}")
-
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
     def dump_predict_times(self) -> None:
@@ -388,15 +380,6 @@ class CausalLanguageModel(LanguageModel):
         if self.predict_total_ns > 0:
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
-#        for prefix_len in sorted(self.predict_prefix_len_to_count.keys()):
-#            avg_time_secs = -1.0
-#            if self.predict_prefix_len_to_count[prefix_len] > 0:
-#                avg_time_secs = self.predict_prefix_len_to_ns[prefix_len] / self.predict_prefix_len_to_count[prefix_len] / 1e+9
-#            print(f"Predict len \t{prefix_len}\t"
-#                  f"{self.predict_prefix_len_to_count[prefix_len]}\t"
-#                  f"{self.predict_prefix_len_to_ns[prefix_len]}\t"
-#                  f"{avg_time_secs: .6f}\t"
-#                  f"{self.predict_prefix_len_to_completed[prefix_len]}")
 
     def update(self) -> None:
         """Update the model state"""
