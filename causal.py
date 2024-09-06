@@ -304,8 +304,8 @@ class CausalLanguageModel(LanguageModel):
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
                 for token_id in itertools.chain(vocab, extra_vocab):
                     # For a hypothesis to finish it must extend beyond the existing typed context
-                    subword_len = len(self.index_to_word_lower[token_id])
-                    if (current[LEN] + subword_len) > len(context):
+                    #subword_len = len(self.index_to_word_lower[token_id])
+                    if (current[LEN] + len(self.index_to_word_lower[token_id])) > len(context):
                         # Add this likelihood to the list for the character at the prediction position.
                         # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                         char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
@@ -315,18 +315,23 @@ class CausalLanguageModel(LanguageModel):
                         # Note: this means we may not get to everything in this set of vocab, extra_vocab.
                         #if self.max_completed and completed >= self.max_completed:
                         #    break
-                    elif not self.beam_width or len(next_hypos) < self.beam_width:
-                        # If we are under the beam limit then just add it
-                        heapq.heappush(next_hypos,
-                                       (new_log_probs[current_index][token_id],
-                                        current[SEQ] + [token_id],
-                                        current[LEN] + subword_len))
-                    elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
-                        # Or replace the worst hypotheses with the new one
-                        heapq.heappushpop(next_hypos,
-                                          (new_log_probs[current_index][token_id],
+                    #elif not self.beam_width or len(next_hypos) < self.beam_width:
+                    #    # If we are under the beam limit then just add it
+                    #    heapq.heappush(next_hypos,
+                    #                   (new_log_probs[current_index][token_id],
+                    #                    current[SEQ] + [token_id],
+                    #                    current[LEN] + subword_len))
+                    #elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
+                    #    # Or replace the worst hypotheses with the new one
+                    #    heapq.heappushpop(next_hypos,
+                    #                      (new_log_probs[current_index][token_id],
+                    #                       current[SEQ] + [token_id],
+                    #                       current[LEN] + subword_len))
+                    else:
+                        # Removed beam pruning, add to a simple list
+                        next_hypos.append((new_log_probs[current_index][token_id],
                                            current[SEQ] + [token_id],
-                                           current[LEN] + subword_len))
+                                           current[LEN] + len(self.index_to_word_lower[token_id])))
 
                 if self.max_completed and completed >= self.max_completed:
                     break
