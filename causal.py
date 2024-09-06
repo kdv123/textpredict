@@ -28,7 +28,6 @@ class CausalLanguageModel(LanguageModel):
                  mixed_case_context: bool = False,
                  case_simple: bool = False,
                  max_completed: int = None,
-                 beam_log_prob: float = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -43,7 +42,6 @@ class CausalLanguageModel(LanguageModel):
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
-            beam_log_prob      - prune using log probability difference threshold
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -61,7 +59,6 @@ class CausalLanguageModel(LanguageModel):
         self.mixed_case_context = mixed_case_context
         self.case_simple = case_simple
         self.max_completed = max_completed
-        self.beam_log_prob = beam_log_prob
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -239,10 +236,7 @@ class CausalLanguageModel(LanguageModel):
         next_hypos = []
 
         # Tracks count of completed hypotheses
-        #completed = 0
-
-        # In the case of probability based pruning we need to track the best complete hypothesis log prob
-        best_log_prob = float("-inf")
+        completed = 0
 
         # Start a beam search forward from the backed off token sequence.
         # Each iteration of this while loop extends hypotheses by all valid tokens.
@@ -313,37 +307,32 @@ class CausalLanguageModel(LanguageModel):
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
                 for token_id in itertools.chain(vocab, extra_vocab):
                     # For a hypothesis to finish it must extend beyond the existing typed context
-                    new_log_prob = new_log_probs[current_index][token_id]
-                    if not self.beam_log_prob or (best_log_prob - new_log_prob) < self.beam_log_prob:
-                        subword_len = len(self.index_to_word_lower[token_id])
-                        if (current[LEN] + subword_len) > len(context):
-                            # Add this likelihood to the list for the character at the prediction position.
-                            # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_prob,
-                            #self.predict_prefix_len_to_completed[prefix_len] += 1
-                            #completed += 1
-                            if self.beam_log_prob:
-                                best_log_prob = max(best_log_prob, new_log_prob)
-                            # Abandon the search as soon as we hit the target number of completions.
-                            # Note: this means we may not get to everything in this set of vocab, extra_vocab.
-                            #if self.max_completed and completed >= self.max_completed:
-                            #    break
-                        elif len(next_hypos) < self.beam_width:
-                            # If we are under the beam limit then just add it
-                            heapq.heappush(next_hypos,
-                                           (new_log_prob,
-                                            current[SEQ] + [token_id],
-                                            current[LEN] + subword_len))
-                        elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
-                            # Or replace the worst hypotheses with the new one
-                            heapq.heappushpop(next_hypos,
-                                              (new_log_prob,
-                                               current[SEQ] + [token_id],
-                                               current[LEN] + subword_len))
+                    subword_len = len(self.index_to_word_lower[token_id])
+                    if (current[LEN] + subword_len) > len(context):
+                        # Add this likelihood to the list for the character at the prediction position.
+                        # Tracking the list and doing logsumpexp later was faster than doing it for each add.
+                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+                        #self.predict_prefix_len_to_completed[prefix_len] += 1
+                        completed += 1
+                        # Abandon the search as soon as we hit the target number of completions.
+                        # Note: this means we may not get to everything in this set of vocab, extra_vocab.
+                        #if self.max_completed and completed >= self.max_completed:
+                        #    break
+                    elif len(next_hypos) < self.beam_width:
+                        # If we are under the beam limit then just add it
+                        heapq.heappush(next_hypos,
+                                       (new_log_probs[current_index][token_id],
+                                        current[SEQ] + [token_id],
+                                        current[LEN] + subword_len))
+                    elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
+                        # Or replace the worst hypotheses with the new one
+                        heapq.heappushpop(next_hypos,
+                                          (new_log_probs[current_index][token_id],
+                                           current[SEQ] + [token_id],
+                                           current[LEN] + subword_len))
 
-                #if self.max_completed and completed >= self.max_completed:
-                #    break
-
+                if self.max_completed and completed >= self.max_completed:
+                    break
                 # Check if we need to bail out early if we hit our maximum quota of completed hypotheses
                 #if self.max_completed:
                 #    # To avoid incrementing an integer in the performance bottleneck part of the for loop, we'll compute
