@@ -291,8 +291,15 @@ class CausalLanguageModel(LanguageModel):
                             extra_vocab += tokenization[0],
 
                 # The below code takes the most time, results from pprofile on 5 phrases on an 2080 GPU:
-                #
-                #
+                #    299|  22484582|      89.5763|   3.9839e-06| 14.24%|                for token_id in itertools.chain(vocab, extra_vocab):
+                #    300|         0|            0|            0|  0.00%|                    # For a hypothesis to finish it must extend beyond the existing typed context
+                #    301|  22483271|      93.7939|  4.17172e-06| 14.91%|                    subword_len = len(self.index_to_word_lower[token_id])
+                #    302|  22483271|      92.8608|  4.13022e-06| 14.76%|                    if (current[LEN] + subword_len) > len(context):
+                #    303|         0|            0|            0|  0.00%|                        # Add this likelihood to the list for the character at the prediction position.
+                #    304|         0|            0|            0|  0.00%|                        # Tracking the list and doing logsumpexp later was faster than doing it for each add.
+                #    305|  22480431|      106.353|  4.73094e-06| 16.90%|                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+                #    306|  22480431|       92.689|   4.1231e-06| 14.73%|                        completed += 1
+                #    307|      2840|    0.0124488|  4.38338e-06|  0.00%|                    elif not self.beam_width or len(next_hypos) <
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
