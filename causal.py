@@ -240,7 +240,6 @@ class CausalLanguageModel(LanguageModel):
         # We only keep at most self.beam_width hypotheses in the valid heap.
         # Stop extending search once we reach our max completed target.
         while len(current_hypos) > 0:
-
             # We'll explore hypothesis in order from most probable to least.
             # This has little impact on how long it takes since this is only sorting a small number of things.
             # But it is important with max_completed pruning since we want to bias for completing high probability things.
@@ -323,13 +322,19 @@ class CausalLanguageModel(LanguageModel):
                                           (new_log_probs[current_index][token_id],
                                            current[SEQ] + [token_id],
                                            current[LEN] + subword_len))
+                #print(f"DEBUG: completed {completed}, len={len(char_to_log_probs)}, max={len(self.symbol_set_lower)}, [{[len(char_to_log_probs[x]) for x in char_to_log_probs]}]")
 
+                # Break out of the for loop if we reach our max completed goal
                 if self.max_completed and completed >= self.max_completed:
                     break
 
-            # Swap in the extended set as the new current working set
-            current_hypos = next_hypos
-            next_hypos = []
+            # This will cause the while loop to stop when we reach our max completed goal
+            if self.max_completed and completed >= self.max_completed:
+                current_hypos = []
+            else:
+                # Swap in the extended set as the new current working set
+                current_hypos = next_hypos
+                next_hypos = []
 
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
