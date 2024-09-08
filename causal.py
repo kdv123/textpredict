@@ -328,8 +328,8 @@ class CausalLanguageModel(LanguageModel):
                 #print(f"DEBUG: completed {completed}, len={len(char_to_log_probs)}, max={len(self.symbol_set_lower)}, [{[len(char_to_log_probs[x]) for x in char_to_log_probs]}]")
                 # Check if each character has at least two entries
                 done = True
-                for x in char_to_log_probs:
-                    if len(x) < 2:
+                for probs in char_to_log_probs.values():
+                    if len(probs) < 2:
                         done = False
                         break
                 if done:
