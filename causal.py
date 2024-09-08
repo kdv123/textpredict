@@ -312,7 +312,7 @@ class CausalLanguageModel(LanguageModel):
                         # Add this likelihood to the list for the character at the prediction position.
                         # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                         char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                        #completed += 1
+                        completed += 1
                     elif not self.beam_width or len(next_hypos) < self.beam_width:
                         # If we are under the beam limit then just add it
                         heapq.heappush(next_hypos,
@@ -325,22 +325,11 @@ class CausalLanguageModel(LanguageModel):
                                           (new_log_probs[current_index][token_id],
                                            current[SEQ] + [token_id],
                                            current[LEN] + subword_len))
-                #print(f"DEBUG: completed {completed}, len={len(char_to_log_probs)}, max={len(self.symbol_set_lower)}, [{[len(char_to_log_probs[x]) for x in char_to_log_probs]}]")
-                # Check if each character has at least two entries
-                if len(char_to_log_probs) >= len(self.symbol_set_lower):
-                    # For testing, reusing another command line parameter
-                    if min([len(probs) for probs in char_to_log_probs.values()]) >= self.max_completed:
-                        done = True
-                        break
 
-#                if len(char_to_log_probs) >= len(self.symbol_set_lower):
-#                    done = True
-#                    break
-
-                # Break out of the for loop if we reach our max completed goal
-                #if self.max_completed and completed >= self.max_completed:
-                #    done = True
-                #    break
+                # Break out of the for loop over hypotheses and while loop if we reach our max completed goal
+                if self.max_completed and completed >= self.max_completed:
+                    done = True
+                    break
 
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
