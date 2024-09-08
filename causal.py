@@ -235,11 +235,14 @@ class CausalLanguageModel(LanguageModel):
         # Tracks count of completed hypotheses
         completed = 0
 
+        # Used to signal to while loop to stop the search
+        done = False
+
         # Start a beam search forward from the backed off token sequence.
         # Each iteration of this while loop extends hypotheses by all valid tokens.
         # We only keep at most self.beam_width hypotheses in the valid heap.
         # Stop extending search once we reach our max completed target.
-        while len(current_hypos) > 0:
+        while len(current_hypos) > 0 and not done:
             # We'll explore hypothesis in order from most probable to least.
             # This has little impact on how long it takes since this is only sorting a small number of things.
             # But it is important with max_completed pruning since we want to bias for completing high probability things.
@@ -309,7 +312,7 @@ class CausalLanguageModel(LanguageModel):
                         # Add this likelihood to the list for the character at the prediction position.
                         # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                         char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                        completed += 1
+                        #completed += 1
                     elif not self.beam_width or len(next_hypos) < self.beam_width:
                         # If we are under the beam limit then just add it
                         heapq.heappush(next_hypos,
@@ -323,18 +326,18 @@ class CausalLanguageModel(LanguageModel):
                                            current[SEQ] + [token_id],
                                            current[LEN] + subword_len))
                 #print(f"DEBUG: completed {completed}, len={len(char_to_log_probs)}, max={len(self.symbol_set_lower)}, [{[len(char_to_log_probs[x]) for x in char_to_log_probs]}]")
-
-                # Break out of the for loop if we reach our max completed goal
-                if self.max_completed and completed >= self.max_completed:
+                if len(char_to_log_probs) >= len(self.symbol_set_lower):
+                    done = True
                     break
 
-            # This will cause the while loop to stop when we reach our max completed goal
-            if self.max_completed and completed >= self.max_completed:
-                current_hypos = []
-            else:
-                # Swap in the extended set as the new current working set
-                current_hypos = next_hypos
-                next_hypos = []
+                # Break out of the for loop if we reach our max completed goal
+                #if self.max_completed and completed >= self.max_completed:
+                #    done = True
+                #    break
+
+            # Swap in the extended set as the new current working set
+            current_hypos = next_hypos
+            next_hypos = []
 
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
