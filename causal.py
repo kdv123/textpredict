@@ -326,9 +326,18 @@ class CausalLanguageModel(LanguageModel):
                                            current[SEQ] + [token_id],
                                            current[LEN] + subword_len))
                 #print(f"DEBUG: completed {completed}, len={len(char_to_log_probs)}, max={len(self.symbol_set_lower)}, [{[len(char_to_log_probs[x]) for x in char_to_log_probs]}]")
-                if len(char_to_log_probs) >= len(self.symbol_set_lower):
-                    done = True
+                # Check if each character has at least two entries
+                done = True
+                for x in char_to_log_probs:
+                    if len(x) < 2:
+                        done = False
+                        break
+                if done:
                     break
+
+#                if len(char_to_log_probs) >= len(self.symbol_set_lower):
+#                    done = True
+#                    break
 
                 # Break out of the for loop if we reach our max completed goal
                 #if self.max_completed and completed >= self.max_completed:
