@@ -14,6 +14,8 @@ from datetime import datetime
 import os
 from language_model import SPACE_CHAR
 from language_model import alphabet
+from socket import gethostname
+
 
 if __name__ == "__main__":
 
@@ -44,7 +46,8 @@ if __name__ == "__main__":
     parser.add_argument('--stats-file', help="write summary stats to specified file")
     parser.add_argument('--stats-extra', help="extra string to write to stats file as first column")
     parser.add_argument("--phrase-limit", type=int, help="max phrases to evaluate")
-    parser.add_argument("--beam-width", type=int, help="search beam width")
+    parser.add_argument("--beam-width", type=int, help="search beam width for causal LM, recommended value = 8")
+    parser.add_argument("--max-completed", type=int, help="stop causal LM search after this many completed hypotheses, recommended value = 32000")
     parser.add_argument('--ppl-file', help="output sentence and ppl to a file")
     parser.add_argument('--symbol-file', help="output symbol log probs to a file")
     parser.add_argument("--fp16", help="convert model to fp16 (CUDA only)", action="store_true")
@@ -53,8 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("--ngram-lm", help="ngram model to load")
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="mixture weight for ngram in type 6 mix")
     parser.add_argument('--srilm-file', help="output SRILM debug 2 log file")
-    parser.add_argument("--skip-norm", help="skip normalization over symbol set for KenLM model", action="store_true", default=False)
-    parser.add_argument("--max-completed", type=int, help="stop search once we complete this many hypotheses")
+    parser.add_argument("--skip-norm", help="skip normalization over symbols for KenLM model, for matching SRILM with LM with extra symbols", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -80,6 +82,11 @@ if __name__ == "__main__":
 
     if args.case_simple and not args.mixed_case_context:
         print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
+
+    # Handy stuff to print out in our log files
+    print(f"START: {datetime.now()}")
+    print(f"ARGS: {args}")
+    print(f"HOSTNAME: {gethostname()}")
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
