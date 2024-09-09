@@ -302,6 +302,17 @@ class CausalLanguageModel(LanguageModel):
                 #    305|  22480431|      106.353|  4.73094e-06| 16.90%|                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                 #    306|  22480431|       92.689|   4.1231e-06| 14.73%|                        completed += 1
                 #    307|      2840|    0.0124488|  4.38338e-06|  0.00%|                    elif not self.beam_width or len(next_hypos) <
+                #
+                # Tuning notes:
+                #  - With a beam of 8 and max completed of 32,000, getting around 5x speedup on written dev set.
+                #  - This results in a PPL increase of 0.0025 versus old results using only beam of >= 8.
+                #  - Pruning based on log probability difference and based on minimum number of hypotheses per symbol in alphabet did worse.
+                #  - Code for these other pruning methods was removed.
+                # Possible ways to make it faster:
+                #  - Stop part way through the below for loop over (vocab, extra_vocab). But this seems weird since the token IDs are in
+                #    no particular order, we'd be just stopping early on the last hypothesis being explored by the enclosing loop.
+                #  - Sort the rows in the log prob results on the GPU. Use these to limit which token IDs we explore in the below
+                #    for loop. Is it possible to do this without introducing too much extra work to limit to the high probability ones?
 
                 # Create a list of token indexes that are a prefix of the target text.
                 # We go over all the integer IDs in the vocab and extra_vocab lists.
