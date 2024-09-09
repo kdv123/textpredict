@@ -5,7 +5,7 @@ import sys
 if __name__ == "__main__":
     in_overall = False
 
-    results = [0, 0, 0, 0, 0]
+    results = ["", "", "", "", ""]
 
     for line in sys.stdin:
         line = line.strip()
@@ -21,5 +21,7 @@ if __name__ == "__main__":
             results[3] = line.split()[-1]
         elif in_overall and line.startswith("per-symbol prediction time = "):
             results[4] = line.split()[4]
-
+    if len(sys.argv) > 1:
+        for i in range(1, len(sys.argv)):
+            print(f"{sys.argv[i]}", end="\t")
     print("\t".join(results))
