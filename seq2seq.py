@@ -75,11 +75,11 @@ class Seq2SeqLanguageModel(LanguageModel):
 
         # Add span token and </s>
         input_ids_with_span = torch.tensor([self.left_context_tokens + input_ids[0:-1] + [258] + [1]])
-        print(f"input_ids_with_span, size {len(input_ids_with_span)}, {input_ids_with_span}")
+        #print(f"input_ids_with_span, size {len(input_ids_with_span)}, {input_ids_with_span}")
 
         outputs = self.model.generate(
             input_ids_with_span.to(self.device),
-            max_length=18,            
+            max_length=32,
             num_beams=self.num_results,
             num_return_sequences=self.num_results,
             early_stopping=True,
