@@ -16,6 +16,7 @@ class NGramLanguageModel(LanguageModel):
                  skip_symbol_norm: Optional[bool] = False):
 
         super().__init__(symbol_set=symbol_set)
+        print(f"Creating n-gram language model, lm_path = {lm_path}")
         self.model = None
         self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm

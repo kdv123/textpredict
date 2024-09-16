@@ -10,15 +10,14 @@ from exceptions import InvalidLanguageModelException
 """All supported models must be imported"""
 from causal import CausalLanguageModel
 from ngram import NGramLanguageModel
-from unigram import UnigramLanguageModel
-
+from causal_byte import CausalByteLanguageModel
 
 class MixtureLanguageModel(LanguageModel):
     """
         Character language model that mixes any combination of other models
     """
 
-    supported_lm_types = ["CAUSAL", "UNIGRAM", "KENLM"]
+    supported_lm_types = ["CAUSAL", "CAUSALBYTE", "NGRAM"]
 
     @staticmethod
     def language_models_by_name() -> Dict[str, LanguageModel]:
@@ -120,13 +119,12 @@ class MixtureLanguageModel(LanguageModel):
         """
             Load the language models to be mixed
         """
-
         language_models = MixtureLanguageModel.language_models_by_name()
         for lm_type, params in zip(self.lm_types, self.lm_params):
             model = language_models[lm_type]
             lm = None
             try:
-                lm = model(self.response_type, self.symbol_set, **params)
+                lm = model(self.symbol_set, **params)
             except InvalidLanguageModelException as e:
                 raise InvalidLanguageModelException(f"Error in creation of model type {lm_type}: {e.message}")
 

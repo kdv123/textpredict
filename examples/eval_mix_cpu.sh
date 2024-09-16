@@ -9,5 +9,5 @@ NAME=mix_cpu
 PHRASES=comm_dev_letter.txt
 wc -l -w ${PHRASES}
 
-../lm_eval.py --phrases ${PHRASES} --model 4 --verbose 2 --add-char "'" --model-name ${MODEL_NAME} --ngram-lm {LM} --beam-width 8 --max-completed 32000 --case-simple --mixed-case-context --ppl-file ${NAME}.ppl --ngram-mix 0.2
+../lm_eval.py --phrases ${PHRASES} --model 6 --verbose 2 --add-char "'" --model-name ${MODEL_NAME} --ngram-lm ${LM} --beam-width 8 --max-completed 32000 --case-simple --mixed-case-context --ppl-file ${NAME}.ppl --ngram-mix 0.2
 
