@@ -29,18 +29,15 @@ from socket import gethostname
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--verbose', dest='verbose', type=int, default=0,
-        help='0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character')
-
-    parser.add_argument('--model', dest='model', type=int, required=True,
+    parser.add_argument("--verbose", type=int, default=0,
+                        help="0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character")
+    parser.add_argument("--model", type=int, required=True,
                         help=("3: KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte\n8: Uniform\n9: Mix (Casual Byte/Ngram)"))
-
-    parser.add_argument('--phrases', dest='phrases', type=str, required=True,
-                        help='Phrase set filename')
-
-    parser.add_argument('--model-name', dest='model_name')
-    parser.add_argument('--model-dir',
-                        dest='model_dir',
+    parser.add_argument("--phrases", type=str, required=True,
+                        help="Phrase set filename")
+    parser.add_argument("--model-name",
+                        help="Model name of causal model")
+    parser.add_argument("--model-dir",
                         help="Local directory to load fine-tuned causal model")
     parser.add_argument("--use-mps",
                         action="store_true",
@@ -48,23 +45,40 @@ if __name__ == "__main__":
     parser.add_argument("--use-cuda",
                         action="store_true",
                         help="Use CUDA GPU during inference")
-    parser.add_argument("--left-context", help="left language model context for causal model", default="")
-    parser.add_argument("--add-char", help="add character to symbol set", action="append", dest="extra_chars")
-    parser.add_argument("--time-outliers", help="print time outliers at end", action="store_true")
-    parser.add_argument("--stats-file", help="write summary stats to specified file")
-    parser.add_argument("--stats-extra", help="extra string to write to stats file as first column")
-    parser.add_argument("--phrase-limit", type=int, help="max phrases to evaluate")
-    parser.add_argument("--beam-width", type=int, help="search beam width for causal LM, recommended value = 8")
-    parser.add_argument("--max-completed", type=int, help="stop causal LM search after this many completed hypotheses, recommended value = 32000")
-    parser.add_argument("--ppl-file", help="output sentence and ppl to a file")
-    parser.add_argument("--symbol-file", help="output symbol log probs to a file")
-    parser.add_argument("--fp16", help="convert model to fp16 (CUDA only)", action="store_true")
-    parser.add_argument("--mixed-case-context", help="use mixed case left context", action="store_true", default=False)
-    parser.add_argument("--case-simple", help="simple automatic casing of let context", action="store_true", default=False)
-    parser.add_argument("--ngram-lm", help="ngram model to load")
-    parser.add_argument("--ngram-mix", type=float, default=0.5, help="mixture weight for ngram in type 6 mix")
-    parser.add_argument("--srilm-file", help="output SRILM debug 2 log file")
-    parser.add_argument("--skip-norm", help="skip normalization over symbols for KenLM model, for matching SRILM with LM with extra symbols", action="store_true", default=False)
+    parser.add_argument("--left-context", default="",
+                        help="left language model context for causal model")
+    parser.add_argument("--add-char", action="append", dest="extra_chars",
+                        help="add character to symbol set")
+    parser.add_argument("--time-outliers", action="store_true",
+                        help="print time outliers at end")
+    parser.add_argument("--stats-file",
+                        help="write summary stats to specified file")
+    parser.add_argument("--stats-extra",
+                        help="extra string to write to stats file as first column")
+    parser.add_argument("--phrase-limit", type=int,
+                        help="max phrases to evaluate")
+    parser.add_argument("--beam-width", type=int,
+                        help="search beam width for causal LM, recommended value = 8")
+    parser.add_argument("--max-completed", type=int,
+                        help="stop causal LM search after this many completed hypotheses, recommended value = 32000")
+    parser.add_argument("--ppl-file",
+                        help="output sentence and ppl to a file")
+    parser.add_argument("--symbol-file",
+                        help="output symbol log probs to a file")
+    parser.add_argument("--fp16", action="store_true",
+                        help="convert model to fp16 (CUDA only)")
+    parser.add_argument("--mixed-case-context", action="store_true", default=False,
+                        help="use mixed case left context")
+    parser.add_argument("--case-simple", action="store_true", default=False,
+                        help="simple automatic casing of let context")
+    parser.add_argument("--ngram-lm",
+                        help="ngram model to load")
+    parser.add_argument("--ngram-mix", type=float, default=0.5,
+                        help="mixture weight for ngram in mixture models")
+    parser.add_argument("--srilm-file",
+                        help="output SRILM debug 2 log file")
+    parser.add_argument("--skip-norm", action="store_true", default=False,
+                        help="skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
 
     args = parser.parse_args()
 
@@ -72,16 +86,16 @@ if __name__ == "__main__":
     model = args.model
     phrases = args.phrases
 
-    if model == 3 and not args.model_dir:
-        print("ERROR: For KenLM n-gram model you must specify filename of model using --model-dir")
+    if model == 3 and not args.ngram_lm:
+        print("ERROR: For n-gram model you must specify filename of model using --ngram-lm")
         sys.exit(1)
 
     if model == 4 and not args.model_name:
         print("ERROR: For causal model you must specify name of model using --model-name")
         sys.exit(1)
 
-    if model == 6 and (not args.model_name or not args.ngram_lm):
-        print(f"ERROR: For causal model you must specify name of causal LLM using --model-name and ngram LM using --ngram-lm")
+    if (model == 6 or model == 9) and (not args.model_name or not args.ngram_lm):
+        print(f"ERROR: For mixture model you must specify name of causal LLM using --model-name and ngram LM using --ngram-lm")
         sys.exit(1)
 
     if model == 7 and not args.model_name:
@@ -137,7 +151,7 @@ if __name__ == "__main__":
         print(f"Modified symbol_set: {symbol_set}")
 
     if model == 3:
-        lm = NGramLanguageModel(symbol_set, args.model_dir, args.skip_norm)
+        lm = NGramLanguageModel(symbol_set, args.ngram_lm, args.skip_norm)
     elif model == 4:
         lm = CausalLanguageModel(symbol_set=symbol_set,
                                  lang_model_name=args.model_name,

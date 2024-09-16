@@ -17,7 +17,7 @@ class MixtureLanguageModel(LanguageModel):
         Character language model that mixes any combination of other models
     """
 
-    supported_lm_types = ["CAUSAL", "CAUSALBYTE", "NGRAM"]
+    supported_lm_types = ["CAUSAL", "CAUSALBYTE", "NGRAM", "UNIFORM"]
 
     @staticmethod
     def language_models_by_name() -> Dict[str, LanguageModel]:
