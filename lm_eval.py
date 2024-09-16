@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Calculates per-character perplexity on a set of sentences using a language model.
 # Supports the following types of models:
-#   1) Uniform language model, same probabilty for every symbol in the vocabulary
+#   1) Uniform language model, same probability for every symbol in the vocabulary
 #   2) N-gram language model via the KenLM library, ARPA or KenLM format file
 #   3) Causal LLM using subword tokenization, Hugging Face model support by the automodel
 #   4) Causal LLM using byte tokenization, Hugging Face ByGPT5 model: https://github.com/potamides/uniformers
