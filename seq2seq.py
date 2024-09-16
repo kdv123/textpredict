@@ -179,7 +179,7 @@ class Seq2SeqLanguageModel(LanguageModel):
         if self.left_context and len(self.left_context) > 0:
             # Tokenizer adds </s> to the end but nothing to the front, drop the end </s>
             self.left_context_tokens = self.tokenizer(self.left_context).input_ids[0:-1]
-        print(f"DEBUG left_context_tokens = {self.left_context_tokens}")
+        print(f"DEBUG, left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
 
     def state_update(self, evidence: List[str]) -> List[Tuple]:
         """

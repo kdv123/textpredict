@@ -136,7 +136,18 @@ This combines the causal subword LLM with a mixture weight 0.8 with an n-gram wi
 On cheetah using the CPU:
 % eval_mix_cpu.sh
 ...
-
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.213665 +/- 0.105852 [0.051887, 1.024360]         
+95% CI = [0.001961, 0.425369]         
+inference time = 874.98        
+sum logprob = -1708.82         
+sum symbols = 4093         
+mean symbol log prob = -0.4175         
+mean sentence ppl = 2.7506         
+ppl = 2.6152
+Predict %: inference 84.585
 
 On cheetah using a 2080 Ti GPU:
 % eval_mix_gpu.sh
