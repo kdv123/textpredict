@@ -1,4 +1,4 @@
-# Parse out importat stats from the end of the output of the lm_eval.py script.
+# Parse out important stats from the end of the output of the lm_eval.py script.
 
 import sys
 

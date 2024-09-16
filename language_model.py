@@ -46,7 +46,7 @@ class LanguageModel(ABC):
             evidence - ['A', 'B']
 
         Response:
-            probability - dependant on response type, a list of words or symbols with probability
+            probability - dependent on response type, a list of words or symbols with probability
         """
         ...
 

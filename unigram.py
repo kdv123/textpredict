@@ -51,8 +51,6 @@ class UnigramLanguageModel(LanguageModel):
     def load(self) -> None:
         """
             Load the language model and tokenizer, initialize class variables
-        Args:
-            path: language model file path, can be just "unigram"
         """
 
     def state_update(self, evidence: List[str]) -> List[Tuple]:

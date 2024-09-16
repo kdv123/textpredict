@@ -1,7 +1,6 @@
 from collections import Counter
 from typing import Optional, List, Tuple
 from language_model import LanguageModel
-from language_model import LanguageModel
 from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
