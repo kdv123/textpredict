@@ -6,7 +6,7 @@
 CUDA=${1}
 NAME=byte_gpu
 
-MODEL_NAME=MODEL_NAME=nllg/bygpt5-small-en
+MODEL_NAME=nllg/bygpt5-small-en
 
 PHRASES=comm_dev_letter.txt
 wc -l -w ${PHRASES}

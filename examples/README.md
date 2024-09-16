@@ -4,8 +4,9 @@ Files:
     comm_case_dev.txt           COMM set of sentences written in response to hypothetical communication situations: https://www.tandfonline.com/doi/abs/10.1080/07434619912331278625
     filter_comm.sh              Filter the COMM set to restrict to lowercase sentences just with a-z, apostrophe, and space.
     download_ngram.sh           Download some n-gram models for use in testing.
+    eval_*.sh                   Evaluate the COMM set using a variety of different models.
 
-**** Some preliminary preparation ****
+**** Some preliminary prep ****
 % filter_comm.sh
 % download_ngram.sh
 
@@ -64,7 +65,7 @@ ppl = 2.8699
 **** Evaluate using a causal LLM with subword tokenization ****
 You can evaluate on a CPU, but it will be slower.
 
-On cheetah:
+On cheetah using the CPU:
 % eval_causal_cpu.sh
 OVERALL         
 phrases = 124,         
@@ -81,27 +82,35 @@ Predict %: inference 84.574
 
 On cheetah using a 2080 Ti GPU:
 % eval_causal_gpu.sh
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.044924 +/- 0.008152 [0.029218, 0.188850]         
+95% CI = [0.028621, 0.061227]         
+inference time = 184.30        
+sum logprob = -1708.38         
+sum symbols = 4093         
+mean symbol log prob = -0.4174         
+mean sentence ppl = 2.7500         
+ppl = 2.6145
+Predict %: inference 21.937
 
 **** Evaluate using a causal LLM with byte tokenization ****
 The original byte level LLM was ByT5, but this was an encoder-decoder.
 It was converted into ByGPT5 which uses just the decoder side: https://github.com/potamides/uniformers
 Bear in mind ByGPT5 is a multilingual model compared to some of the other LLMs we've been testing.
 
-On macbook M1 Pro:
-% eval_byte_cpu.sh
-...
+On cheetah using the CPU:
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
-per-symbol prediction time = 0.051557 +/- 0.027102 [0.015232, 0.222341]         
-95% CI = [-0.002647, 0.105761]         
-inference time = 211.35        
+per-symbol prediction time = 0.067271 +/- 0.021268 [0.020762, 0.104329]         
+95% CI = [0.024735, 0.109806]         
+inference time = 275.80        
 sum logprob = -2353.58         
 sum symbols = 4093         
 mean symbol log prob = -0.5750         
 mean sentence ppl = 4.2488         
 ppl = 3.7586
 
-On cheetah:
-
-
+On cheetah using a 2080 Ti GPU:

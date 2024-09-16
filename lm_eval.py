@@ -3,8 +3,8 @@
 # Supports the following types of models:
 #   1) Uniform language model, same probabilty for every symbol in the vocabulary
 #   2) N-gram language model via the KenLM library, ARPA or KenLM format file
-#   3) Causal LLM using subword tokenization, Hugging Face
-#   4) Causal LLM using byte tokenization, Hugging Face
+#   3) Causal LLM using subword tokenization, Hugging Face model support by the automodel
+#   4) Causal LLM using byte tokenization, Hugging Face ByGPT5 model: https://github.com/potamides/uniformers
 #   5) Mixture model using linear interpolation, mixture of the above types
 
 from ngram import NGramLanguageModel
