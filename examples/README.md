@@ -165,3 +165,17 @@ mean sentence ppl = 2.7500
 ppl = 2.6145
 Predict %: inference 22.612
 
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.041020 +/- 0.007604 [0.026595, 0.188603]         
+95% CI = [0.025813, 0.056228]         
+inference time = 168.30        
+sum logprob = -1708.38         
+sum symbols = 4093         
+mean symbol log prob = -0.4174         
+mean sentence ppl = 2.7500         
+ppl = 2.6145
+Predict %: inference 23.233
+
+
