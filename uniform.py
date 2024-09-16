@@ -40,6 +40,17 @@ class UniformLanguageModel(LanguageModel):
     def load(self) -> None:
         """Restore model state from the provided checkpoint"""
 
+    def state_update(self, evidence: List[str]) -> List[Tuple]:
+        """
+            Wrapper method that takes in evidence text and outputs probability distribution
+            of next character
+        Args:
+            evidence - a list of characters (typed by the user)
+        Response:
+            A list of symbols with probabilities
+        """
+        next_char_pred = self.predict(evidence)
+        return next_char_pred
 
 def equally_probable(alphabet: List[str],
                      specified: Optional[Dict[str, float]] = None) -> List[float]:
@@ -56,6 +67,7 @@ def equally_probable(alphabet: List[str],
     --------
         list of probabilities (floats)
     """
+    # TODO: This current builds in mass for the backspace character
     n_letters = len(alphabet)
     if not specified:
         return np.full(n_letters, 1 / n_letters)

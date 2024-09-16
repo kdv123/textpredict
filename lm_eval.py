@@ -1,9 +1,19 @@
+#!/usr/bin/env python
+# Calculates per-character perplexity on a set of sentences using a language model.
+# Supports the following types of models:
+#   1) Uniform language model, same probabilty for every symbol in the vocabulary
+#   2) N-gram language model via the KenLM library, ARPA or KenLM format file
+#   3) Causal LLM using subword tokenization, Hugging Face
+#   4) Causal LLM using byte tokenization, Hugging Face
+#   5) Mixture model using linear interpolation, mixture of the above types
+
 from ngram import NGramLanguageModel
 from mixture import MixtureLanguageModel
 from unigram import UnigramLanguageModel
 from causal import CausalLanguageModel
 from seq2seq import Seq2SeqLanguageModel
 from causal_byte import CausalByteLanguageModel
+from uniform import UniformLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
@@ -25,7 +35,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--model', dest='model', type=int, required=True,
                         help=('1: Unigram\n2: Mixture (80/20 Causal GPT-2/Unigram)\n3: '
-                              'KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte'))
+                              'KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte\n8: Uniform'))
 
     parser.add_argument('--phrases', dest='phrases', type=str, required=True,
                         help='Phrase set filename')
@@ -175,6 +185,8 @@ if __name__ == "__main__":
                                      fp16=args.fp16,
                                      mixed_case_context=args.mixed_case_context,
                                      case_simple=args.case_simple)
+    elif model == 8:
+        lm = UniformLanguageModel(symbol_set=symbol_set)
     else:
         parser.print_help()
         exit()
@@ -432,3 +444,4 @@ if __name__ == "__main__":
                 print(f"LOW OUTLIER: {overall_predict_details_arr[i]}, predict time = {time:.6f}\n")
             if time > ci_ceiling:
                 print(f"HIGH OUTLIER: {overall_predict_details_arr[i]}, predict time = {time:.6f}\n")
+
