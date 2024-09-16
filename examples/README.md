@@ -62,5 +62,5 @@ mean sentence ppl = 2.9549
 ppl = 2.8699
 
 **** Evaluate using a causal LLM ****
-You can evaluate on a CPU, but it will be somewhat slower:
+You can evaluate on a CPU, but it will be slower:
 % eval_causal.sh
