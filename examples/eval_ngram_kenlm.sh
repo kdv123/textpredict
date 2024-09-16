@@ -8,5 +8,5 @@ ls -l ${LM}
 PHRASES=comm_dev_letter.txt
 wc -l -w ${PHRASES}
 
-../lm_eval.py --phrases ${PHRASES} --model 3 --verbose 2 --add-char "'" --model-dir ${LM} --ppl-file ${NAME}.ppl
+../lm_eval.py --phrases ${PHRASES} --model 3 --verbose 2 --add-char "'" --ngram-lm ${LM} --ppl-file ${NAME}.ppl
 
