@@ -1,4 +1,3 @@
-from collections import Counter
 import torch
 from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer

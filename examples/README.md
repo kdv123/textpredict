@@ -61,6 +61,47 @@ mean symbol log prob = -0.4579
 mean sentence ppl = 2.9549         
 ppl = 2.8699
 
-**** Evaluate using a causal LLM ****
-You can evaluate on a CPU, but it will be slower:
-% eval_causal.sh
+**** Evaluate using a causal LLM with subword tokenization ****
+You can evaluate on a CPU, but it will be slower.
+
+On cheetah:
+% eval_causal_cpu.sh
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.210648 +/- 0.104022 [0.053446, 0.944220]         
+95% CI = [0.002604, 0.418693]         
+inference time = 862.63        
+sum logprob = -1708.82         
+sum symbols = 4093         
+mean symbol log prob = -0.4175         
+mean sentence ppl = 2.7506         
+ppl = 2.6152
+Predict %: inference 84.574
+
+On cheetah using a 2080 Ti GPU:
+% eval_causal_gpu.sh
+
+**** Evaluate using a causal LLM with byte tokenization ****
+The original byte level LLM was ByT5, but this was an encoder-decoder.
+It was converted into ByGPT5 which uses just the decoder side: https://github.com/potamides/uniformers
+Bear in mind ByGPT5 is a multilingual model compared to some of the other LLMs we've been testing.
+
+On macbook M1 Pro:
+% eval_byte_cpu.sh
+...
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.051557 +/- 0.027102 [0.015232, 0.222341]         
+95% CI = [-0.002647, 0.105761]         
+inference time = 211.35        
+sum logprob = -2353.58         
+sum symbols = 4093         
+mean symbol log prob = -0.5750         
+mean sentence ppl = 4.2488         
+ppl = 3.7586
+
+On cheetah:
+
+
