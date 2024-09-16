@@ -3,7 +3,7 @@ Various example scripts for testing out the scripts in this repo.
 Files:
     comm_case_dev.txt           COMM set of sentences written in response to hypothetical communication situations: https://www.tandfonline.com/doi/abs/10.1080/07434619912331278625
     filter_comm.sh              Filter the COMM set to restrict to lowercase sentences just with a-z, apostrophe, and space.
-    download_ngram.sh           Download some n-gram models for use in testing.
+    download_ngram.sh           Download n-gram models for use in testing.
     eval_*.sh                   Evaluate the COMM set using a variety of different models.
 
 **** Some preliminary prep ****
@@ -67,6 +67,7 @@ You can evaluate on a CPU, but it will be slower.
 
 On cheetah using the CPU:
 % eval_causal_cpu.sh
+...
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
@@ -82,6 +83,7 @@ Predict %: inference 84.574
 
 On cheetah using a 2080 Ti GPU:
 % eval_causal_gpu.sh
+...
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
@@ -101,6 +103,7 @@ It was converted into ByGPT5 which uses just the decoder side: https://github.co
 Bear in mind ByGPT5 is a multilingual model compared to some of the other LLMs we've been testing.
 
 On cheetah using the CPU:
+...
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
@@ -114,3 +117,14 @@ mean sentence ppl = 4.2488
 ppl = 3.7586
 
 On cheetah using a 2080 Ti GPU:
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.005186 +/- 0.002170 [0.004745, 0.142891]         
+95% CI = [0.000846, 0.009526]         
+inference time = 21.46        
+sum logprob = -2352.79         
+sum symbols = 4093         
+mean symbol log prob = -0.5748         
+mean sentence ppl = 4.2464         
+ppl = 3.7569
