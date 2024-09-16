@@ -10,5 +10,5 @@ NAME=seq2seq_gpu
 PHRASES=comm_dev_letter.txt
 wc -l -w ${PHRASES}
 
-../lm_eval.py --phrases ${PHRASES} --model 5 --verbose 2 --add-char "'" --model-name ${MODEL_NAME}  --ppl-file ${NAME}.ppl --use-cuda --fp16 
+CUDA_VISIBLE_DEVICES=${CUDA} ../lm_eval.py --phrases ${PHRASES} --model 5 --verbose 2 --add-char "'" --model-name ${MODEL_NAME}  --ppl-file ${NAME}.ppl --use-cuda --fp16 
 
