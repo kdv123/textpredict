@@ -173,7 +173,8 @@ if __name__ == "__main__":
                                              "token_backoff": args.token_backoff,
                                              "fp16": args.fp16,
                                              "mixed_case_context": args.mixed_case_context,
-                                             "case_simple": args.case_simple
+                                             "case_simple": args.case_simple,
+                                             "max_completed": args.max_completed,
                                             },
                                             {"lm_path": args.ngram_lm}])
     elif model == 7:
