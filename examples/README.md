@@ -155,14 +155,36 @@ On cheetah using a 2080 Ti GPU:
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
-per-symbol prediction time = 0.041020 +/- 0.007604 [0.026595, 0.188603]         
-95% CI = [0.025813, 0.056228]         
-inference time = 168.30        
-sum logprob = -1708.38         
+per-symbol prediction time = 0.042154 +/- 0.008138 [0.026169, 0.163857]         
+95% CI = [0.025878, 0.058430]         
+inference time = 172.91        
+sum logprob = -1669.25         
 sum symbols = 4093         
-mean symbol log prob = -0.4174         
-mean sentence ppl = 2.7500         
-ppl = 2.6145
-Predict %: inference 23.233
+mean symbol log prob = -0.4078         
+mean sentence ppl = 2.6684         
+ppl = 2.5576
 
+**** Evaluate using a seq2seq encoder-decoder model ****
+This uses the ByT5 byte level model that tries to complete a span between the current context and sentence end token.
 
+On cheetah using a 2080 Ti GPU:
+% eval_seq2seq_gpu.sh
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 1.527232 +/- 0.642333 [0.866661, 5.057585]         
+95% CI = [0.242565, 2.811898]         
+inference time = 6251.55        
+sum logprob = -2931.41         
+sum symbols = 4093         
+mean symbol log prob = -0.7162         
+mean sentence ppl = 5.8318         
+ppl = 5.2024
+
+**** Evaluate using a mixture of causal byte model and n-gram ****
+
+On cheetah using the CPU:
+% eval_mix_byte_cpu.sh
+
+On cheetah using a 2080 Ti GPU:
+% eval_mix_byte_gpu.sh
