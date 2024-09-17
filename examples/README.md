@@ -82,7 +82,7 @@ ppl = 2.6152
 Predict %: inference 84.574
 
 On cheetah using a 2080 Ti GPU:
-% eval_causal_gpu.sh
+% eval_causal_gpu.sh 0
 ...
 OVERALL         
 phrases = 124,         
@@ -103,6 +103,7 @@ It was converted into ByGPT5 which uses just the decoder side: https://github.co
 Bear in mind ByGPT5 is a multilingual model compared to some of the other LLMs we've been testing.
 
 On cheetah using the CPU:
+% eval_byte_cpu.sh
 ...
 OVERALL         
 phrases = 124,         
@@ -117,6 +118,7 @@ mean sentence ppl = 4.2488
 ppl = 3.7586
 
 On cheetah using a 2080 Ti GPU:
+% eval_byte_gpu.sh 0
 ...
 OVERALL         
 phrases = 124,         
@@ -139,18 +141,17 @@ On cheetah using the CPU:
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
-per-symbol prediction time = 0.213665 +/- 0.105852 [0.051887, 1.024360]         
-95% CI = [0.001961, 0.425369]         
-inference time = 874.98        
-sum logprob = -1708.82         
+per-symbol prediction time = 0.227256 +/- 0.107243 [0.060032, 1.040433]         
+95% CI = [0.012771, 0.441741]         
+inference time = 930.55        
+sum logprob = -1669.51         
 sum symbols = 4093         
-mean symbol log prob = -0.4175         
-mean sentence ppl = 2.7506         
-ppl = 2.6152
-Predict %: inference 84.585
+mean symbol log prob = -0.4079         
+mean sentence ppl = 2.6688         
+ppl = 2.5580
 
 On cheetah using a 2080 Ti GPU:
-% eval_mix_gpu.sh
+% eval_mix_gpu.sh 0
 ...
 OVERALL         
 phrases = 124,         
@@ -168,7 +169,8 @@ ppl = 2.5576
 This uses the ByT5 byte level model that tries to complete a span between the current context and sentence end token.
 
 On cheetah using a 2080 Ti GPU:
-% eval_seq2seq_gpu.sh
+% eval_seq2seq_gpu.sh 0
+...
 OVERALL         
 phrases = 124,         
 zero-prob events = 0         
@@ -185,6 +187,30 @@ ppl = 5.2024
 
 On cheetah using the CPU:
 % eval_mix_byte_cpu.sh
+...
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.055172 +/- 0.020200 [0.019734, 0.095852]         
+95% CI = [0.014772, 0.095572]         
+inference time = 226.24        
+sum logprob = -1974.20         
+sum symbols = 4093         
+mean symbol log prob = -0.4823         
+mean sentence ppl = 3.2463         
+ppl = 3.0362
 
 On cheetah using a 2080 Ti GPU:
-% eval_mix_byte_gpu.sh
+% eval_mix_byte_gpu.sh 0
+...
+OVERALL         
+phrases = 124,         
+zero-prob events = 0         
+per-symbol prediction time = 0.005111 +/- 0.002392 [0.004749, 0.157505]         
+95% CI = [0.000326, 0.009896]         
+inference time = 21.17        
+sum logprob = -1974.02         
+sum symbols = 4093         
+mean symbol log prob = -0.4823         
+mean sentence ppl = 3.2459         
+ppl = 3.0359
