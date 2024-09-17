@@ -17,14 +17,14 @@ from math import log10
 from timeit import default_timer as timer
 import argparse
 import numpy as np
-import sys
+from sys import exit
 from scipy.stats import bootstrap
 from datetime import datetime
-import os
+from os import path
 from language_model import SPACE_CHAR
 from language_model import alphabet
 from socket import gethostname
-
+from torch import set_num_threads
 
 if __name__ == "__main__":
 
@@ -79,6 +79,8 @@ if __name__ == "__main__":
                         help="output SRILM debug 2 log file")
     parser.add_argument("--skip-norm", action="store_true", default=False,
                         help="skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
+    parser.add_argument("--num-cores", type=int,
+                        help="limit pytorch to specified number of cores")
 
     args = parser.parse_args()
 
@@ -88,19 +90,19 @@ if __name__ == "__main__":
 
     if model == 3 and not args.ngram_lm:
         print("ERROR: For n-gram model you must specify filename of model using --ngram-lm")
-        sys.exit(1)
+        exit(1)
 
     if model == 4 and not args.model_name:
         print("ERROR: For causal model you must specify name of model using --model-name")
-        sys.exit(1)
+        exit(1)
 
     if (model == 6 or model == 9) and (not args.model_name or not args.ngram_lm):
         print(f"ERROR: For mixture model you must specify name of causal LLM using --model-name and ngram LM using --ngram-lm")
-        sys.exit(1)
+        exit(1)
 
     if model == 7 and not args.model_name:
         print("ERROR: For causal byte model you must specify name of model using --model-name")
-        sys.exit(1)
+        exit(1)
 
     if args.case_simple and not args.mixed_case_context:
         print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
@@ -109,6 +111,10 @@ if __name__ == "__main__":
     print(f"START: {datetime.now()}")
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
+
+    if args.num_cores:
+        set_num_threads(args.num_cores)
+        print(f"Limiting pytorch to {args.num_cores} cores")
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
@@ -432,7 +438,7 @@ if __name__ == "__main__":
         if model == 4:
             params = lm.get_num_parameters()
 
-        exists = os.path.isfile(args.stats_file)
+        exists = path.isfile(args.stats_file)
         with open(args.stats_file, 'a') as file:
             if not exists:
                 # Header if the stats file doesn't already exist
@@ -455,7 +461,7 @@ if __name__ == "__main__":
                          f"\n")
 
     # Prediction timing stats for the causal LLM
-    if model == 4:
+    if model == 4 or model == 6:
         lm.dump_predict_times()
 
     # Optionally print the predictions that took an abnormal amount of time
