@@ -25,6 +25,7 @@ from language_model import SPACE_CHAR
 from language_model import alphabet
 from socket import gethostname
 from torch import set_num_threads
+from psutil import cpu_count
 
 if __name__ == "__main__":
 
@@ -113,8 +114,20 @@ if __name__ == "__main__":
     print(f"HOSTNAME: {gethostname()}")
 
     if args.num_cores:
+        # User has specified their desired number of cores
         set_num_threads(args.num_cores)
         print(f"Limiting pytorch to {args.num_cores} cores")
+    elif args.usa_cuda:
+        # Testing showed more CPU cores did not improve inference speed when a GPU is being used
+        set_num_threads(1)
+        print(f"Using CUDA, limiting pytorch to 1 core. You can override with --num-cores but might no speed things up")
+    else:
+        # Testing showed CPU only inference didn't get faster after 32 cores
+        physical_cores = cpu_count(logical=False)
+        max_useful_cores = 32
+        if physical_cores > max_useful_cores:
+            set_num_threads(max_useful_cores)
+            print(f"Limiting pytorch to {max_useful_cores} cores. You can override with --num-cores but might no speed things up")
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
