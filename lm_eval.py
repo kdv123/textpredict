@@ -117,7 +117,7 @@ if __name__ == "__main__":
         # User has specified their desired number of cores
         set_num_threads(args.num_cores)
         print(f"Limiting pytorch to {args.num_cores} cores")
-    elif args.usa_cuda:
+    elif args.use_cuda:
         # Testing showed more CPU cores did not improve inference speed when a GPU is being used
         set_num_threads(1)
         print(f"Using CUDA, limiting pytorch to 1 core. You can override with --num-cores but might no speed things up")
