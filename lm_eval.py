@@ -16,6 +16,7 @@ from uniform import UniformLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
+import string
 import numpy as np
 from sys import exit
 from scipy.stats import bootstrap
@@ -48,6 +49,8 @@ if __name__ == "__main__":
                         help="Use CUDA GPU during inference")
     parser.add_argument("--left-context", default="",
                         help="left language model context for causal model")
+    parser.add_argument("--left-context-file", default="",
+                        help="name of file containing the left language model context for causal model. Context using --left-context takes priority.")
     parser.add_argument("--add-char", action="append", dest="extra_chars",
                         help="add character to symbol set")
     parser.add_argument("--time-outliers", action="store_true",
@@ -128,6 +131,18 @@ if __name__ == "__main__":
         if physical_cores > max_useful_cores:
             set_num_threads(max_useful_cores)
             print(f"Limiting pytorch to {max_useful_cores} cores. You can override with --num-cores but might no speed things up")
+    
+    if args.left_context_file != "":
+        try:
+            with open(args.left_context_file, "r", encoding="utf-8") as f:
+                contents = ""
+                for line in f:
+                    if line not in string.whitespace:
+                        contents += f" {line.rstrip()}"
+                contents = contents.strip()
+                args.left_context = contents
+        except FileNotFoundError:
+            print("CANNOT OPEN LEFT CONTEXT FILE {args.left_context_file}")
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
