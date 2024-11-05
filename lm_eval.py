@@ -17,6 +17,7 @@ from math import log10
 from timeit import default_timer as timer
 import argparse
 import string
+import json
 import numpy as np
 from sys import exit
 from scipy.stats import bootstrap
@@ -69,6 +70,8 @@ if __name__ == "__main__":
                         help="output sentence and ppl to a file")
     parser.add_argument("--symbol-file",
                         help="output symbol log probs to a file")
+    parser.add_argument("--json-file",
+                        help="Output overall model data to JSON file with specified file name.")
     parser.add_argument("--fp16", action="store_true",
                         help="convert model to fp16 (CUDA only)")
     parser.add_argument("--mixed-case-context", action="store_true", default=False,
@@ -426,6 +429,23 @@ if __name__ == "__main__":
         \nmean symbol log prob = {np.average(all_symbol_log_probs):.4f} \
         \nmean sentence ppl = {avg_sentence_ppl:.4f} \
         \nppl = {ppl:.4f}")
+
+    if args.json_file:
+        output_dict = {}
+        output_dict["phrases"] = phrase_count
+        output_dict["zero_prob_events"] = zero_prob
+        output_dict["per_symbol_predict_time"] = f"{overall_per_symbol_time:.6f} +/- {overall_std_time:.6f} [{overall_min_time:.6f}, {overall_max_time:.6f}]"
+        output_dict["confidence_interval"] = f"[{ci_floor:.6f}, {ci_ceiling:.6f}]"
+        output_dict["inference_time"] = round(inference_time, 2)
+        output_dict["sum_log_prob"] = round(sum_log_prob, 2)
+        output_dict["sum_symbols"] = sum_symbols
+        output_dict["mean_symbol_log_prob"] = round(np.average(all_symbol_log_probs), 4)
+        output_dict["mean_sentence_ppl"] = round(avg_sentence_ppl, 4)
+        output_dict["ppl"] = round(ppl, 4)
+
+        with open(args.json_file, "w", encoding="utf-8") as f:
+            json.dump(output_dict, f, indent=4)
+            f.write("\n")
 
     # Optional fill that contains the log prob of each prediction
     # Could be useful for recomputing confidence intervals or such
