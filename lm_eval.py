@@ -135,7 +135,7 @@ if __name__ == "__main__":
             set_num_threads(max_useful_cores)
             print(f"Limiting pytorch to {max_useful_cores} cores. You can override with --num-cores but might no speed things up")
     
-    if args.left_context_file != "":
+    if args.left_context_file != "" and args.left_context == "":
         try:
             with open(args.left_context_file, "r", encoding="utf-8") as f:
                 contents = ""
