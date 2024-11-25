@@ -130,6 +130,9 @@ class CausalLanguageModel(LanguageModel):
                 self.left_context = "<|endoftext|>"
             elif "Llama-3.1" in self.model_name:
                 self.left_context = "<|begin_of_text|>"
+            # Seems to have both sentence start and end tokens: https://docs.mistral.ai/guides/tokenization/
+            elif "Mistral" in self.model_name:
+                self.left_context = "<s>"
             else:
                 self.left_context = "</s>"
 
