@@ -83,6 +83,10 @@ class CausalLanguageModel(LanguageModel):
         self.predict_total_ns = 0
         self.predict_inference_ns = 0
 
+
+        # Are we a model that automatically inserts a start token that we need to get rid of
+        self.drop_first_token = False
+
         self.load()
 
     def _build_vocab(self) -> None:
@@ -124,6 +128,8 @@ class CausalLanguageModel(LanguageModel):
         # self.index_to_word[self.vocab["cyclo"][0]] = cyclop
         # self.index_to_word[self.vocab["cyclo"][1]] = cyclopedia
 
+        (self.model_name.startswith("facebook/opt") or "Llama-3.1" in self.model_name)
+
         # Get the index we use for the start or end pseudo-word
         if self.left_context == "":
             if "gpt2" in self.model_name:
@@ -136,6 +142,11 @@ class CausalLanguageModel(LanguageModel):
             else:
                 self.left_context = "</s>"
 
+        # OPT, Llama and Mistral all insert start token
+        drop_first_token = (self.model_name.startswith("facebook/opt") or
+                            "Llama-3.1" in self.model_name or
+                            "Mistral" in self.model_name)
+
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
         print(f"Causal: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
@@ -143,7 +154,7 @@ class CausalLanguageModel(LanguageModel):
     def _encode(self, text: str) -> List[int]:
         tokens = self.tokenizer.encode(text)
         # Both OPT and Llama automatically insert a start token which we want to control ourselves
-        if len(tokens) > 1 and (self.model_name.startswith("facebook/opt") or "Llama-3.1" in self.model_name):
+        if len(tokens) > 1 and self.drop_first_token:
             tokens = tokens[1:]
 
         return tokens
