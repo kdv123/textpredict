@@ -166,21 +166,12 @@ class ClassifierLanguageModel(LanguageModel):
             context = context.lower()
         tokens.extend(self._encode(context))
 
-        print(context)
-        print(tokens)
-        
         tensor = torch.tensor([tokens]).to(self.device)
 
-        print(tensor)
-        
         with torch.no_grad():
             logits = self.model(tensor).logits
-            print(logits)
-
             char_probs = torch.softmax(logits, dim=1).to("cpu").numpy()[0]
 
-        print(char_probs)
-            
         keys = [*"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' "]
         next_char_pred = Counter(dict(zip(keys, char_probs)))
             
@@ -189,8 +180,6 @@ class ClassifierLanguageModel(LanguageModel):
 
         next_char_pred[BACKSPACE_CHAR] = 0.0
 
-#        print(next_char_pred)
-        
         for low in self.symbol_set_lower:
             if low.isalpha():
                 next_char_pred[low.upper()] += next_char_pred[low]
