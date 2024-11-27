@@ -6,6 +6,7 @@
 #   3) Causal LLM using subword tokenization, Hugging Face model support by the automodel
 #   4) Causal LLM using byte tokenization, Hugging Face ByGPT5 model: https://github.com/potamides/uniformers
 #   5) Mixture model using linear interpolation, mixture of the above types
+#   6) Causal LLM with a classification layer, requires downstream task training using AutoModelForSequenceClassification
 
 from ngram import NGramLanguageModel
 from mixture import MixtureLanguageModel
@@ -13,6 +14,7 @@ from causal import CausalLanguageModel
 from seq2seq import Seq2SeqLanguageModel
 from causal_byte import CausalByteLanguageModel
 from uniform import UniformLanguageModel
+from classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
@@ -35,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", type=int, default=0,
                         help="0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character")
     parser.add_argument("--model", type=int, required=True,
-                        help=("3: KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte\n8: Uniform\n9: Mix (Casual Byte/Ngram)"))
+                        help=("3: KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte\n8: Uniform\n9: Mix (Casual Byte/Ngram)\n10: Classifier"))
     parser.add_argument("--phrases", type=str, required=True,
                         help="Phrase set filename")
     parser.add_argument("--model-name",
@@ -111,6 +113,10 @@ if __name__ == "__main__":
         print("ERROR: For causal byte model you must specify name of model using --model-name")
         exit(1)
 
+    if model == 10 and not args.model_name:
+        print("ERROR: For classifier model you must specify name of model using --model-name")
+        exit(1)
+        
     if args.case_simple and not args.mixed_case_context:
         print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
 
@@ -245,6 +251,16 @@ if __name__ == "__main__":
                                              "case_simple": args.case_simple,
                                             },
                                             {"lm_path": args.ngram_lm}])
+    elif model == 10:
+        lm = ClassifierLanguageModel(symbol_set=symbol_set,
+                                     lang_model_name=args.model_name,
+                                     lm_path=args.model_dir,
+                                     lm_device=device,
+                                     lm_left_context=args.left_context,
+                                     beam_width=args.beam_width,
+                                     fp16=args.fp16,
+                                     mixed_case_context=args.mixed_case_context,
+                                     case_simple=args.case_simple)
     else:
         parser.print_help()
         exit()
