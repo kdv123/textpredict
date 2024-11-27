@@ -166,20 +166,35 @@ class ClassifierLanguageModel(LanguageModel):
             context = context.lower()
         tokens.extend(self._encode(context))
 
+        print(context)
+        print(tokens)
+        
         tensor = torch.tensor([tokens]).to(self.device)
+
+        print(tensor)
+        
         with torch.no_grad():
             logits = self.model(tensor).logits
+            print(logits)
+
             char_probs = torch.softmax(logits, dim=1).to("cpu").numpy()[0]
 
-            # Apostrophe is not in our symbol set, redistribute prob mass
-            char_probs[26] = 0.0
+        print(char_probs)
+            
+        keys = [*"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' "]
+        next_char_pred = Counter(dict(zip(keys, char_probs)))
+            
+        next_char_pred[SPACE_CHAR] = next_char_pred[" "]
+        del next_char_pred[" "]
 
-        char_probs = softmax(char_probs)
+        next_char_pred[BACKSPACE_CHAR] = 0.0
 
-        next_char_pred = Counter()
-
-        for i, ch in enumerate(self.symbol_set):
-            next_char_pred[ch] = char_probs[i]
+#        print(next_char_pred)
+        
+        for low in self.symbol_set_lower:
+            if low.isalpha():
+                next_char_pred[low.upper()] += next_char_pred[low]
+                del next_char_pred[low]
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
