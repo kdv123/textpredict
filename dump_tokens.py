@@ -18,4 +18,4 @@ if __name__ == "__main__":
 
     tokens = lm.get_all_tokens_text()
     for i, token in enumerate(tokens):
-        print(f"%d\t%s" % (i, token))
+        print(f"%d\t'%s'" % (i, token))
