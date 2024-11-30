@@ -167,6 +167,18 @@ class CausalLanguageModel(LanguageModel):
         """
         return "".join([f"({self.index_to_word[x]})" for x in sequence])
 
+    def get_all_tokens_text(self):
+        """
+        Return an array with the text of all subword tokens.
+        The array is in order by the integer index into the vocabulary.
+        This is mostly just for exploring the tokens in different LLMs.
+        :return: Array of subword token text strings.
+        """
+        result = []
+        for i in range(self.vocab_size):
+            result.append(self.tokenizer.decode([i]))
+        return result
+
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
