@@ -93,6 +93,8 @@ if __name__ == "__main__":
                         help="limit pytorch to specified number of cores")
     parser.add_argument("--bootstrap-samples", type=int, default=9999,
                         help="number of samples to use for bootstrap estimates")
+    parser.add_argument("--bootstrap-method", default="BCa",
+                        help="method to use for bootstrap, BCa | basic | percentile")
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -126,6 +128,8 @@ if __name__ == "__main__":
     print(f"START: {datetime.now()}")
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
+
+    rng = np.random.default_rng(234893458942534)
 
     if args.num_cores:
         # User has specified their desired number of cores
@@ -485,7 +489,9 @@ if __name__ == "__main__":
         bootstrap_log_prob = bootstrap(data=(all_symbol_log_probs,),
                                         statistic=np.mean,
                                         confidence_level=0.95,
-                                        n_resamples=args.bootstrap_samples)
+                                        n_resamples=args.bootstrap_samples,
+                                        method=args.bootstrap_method,
+                                        random_state=rng)
         print(f"Bootstrap on log probs completed in {(timer() - time_bootstrap):.2f} seconds.")
         sys.stdout.flush()
 
@@ -499,7 +505,9 @@ if __name__ == "__main__":
         bootstrap_sentence_ppl = bootstrap(data=(all_sentence_ppls,),
                                             statistic=np.mean,
                                             confidence_level=0.95,
-                                            n_resamples=args.bootstrap_samples)
+                                            n_resamples=args.bootstrap_samples,
+                                            method=args.bootstrap_method,
+                                            random_state=rng)
         print(f"Bootstrap on sentence ppls completed in {(timer() - time_bootstrap):.2f} seconds.")
         sentence_ppl_high = bootstrap_sentence_ppl.confidence_interval.high
         sentence_ppl_low = bootstrap_sentence_ppl.confidence_interval.low
