@@ -91,7 +91,8 @@ if __name__ == "__main__":
                         help="skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
     parser.add_argument("--num-cores", type=int,
                         help="limit pytorch to specified number of cores")
-
+    parser.add_argument("--bootstrap-samples", type=int, default=9999,
+                        help="number of samples to use for bootstrap estimates")
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -483,7 +484,8 @@ if __name__ == "__main__":
         time_bootstrap = timer()
         bootstrap_log_prob = bootstrap(data=(all_symbol_log_probs,),
                                         statistic=np.mean,
-                                        confidence_level=0.95)
+                                        confidence_level=0.95,
+                                        n_resamples=args.bootstrap_samples)
         print(f"Bootstrap on log probs completed in {(timer() - time_bootstrap):.2f} seconds.")
         sys.stdout.flush()
 
@@ -491,10 +493,13 @@ if __name__ == "__main__":
         ppl_low = pow(10, -1 * bootstrap_log_prob.confidence_interval.high)
         error_bar = (ppl_high - ppl_low) / 2.0
 
+        print(f"Outputting stats to {args.stats_file}, running bootstrap on {len(all_sentence_ppls)} samples.")
+        sys.stdout.flush()
         time_bootstrap = timer()
         bootstrap_sentence_ppl = bootstrap(data=(all_sentence_ppls,),
-                                        statistic=np.mean,
-                                        confidence_level=0.95)
+                                            statistic=np.mean,
+                                            confidence_level=0.95,
+                                            n_resamples=args.bootstrap_samples)
         print(f"Bootstrap on sentence ppls completed in {(timer() - time_bootstrap):.2f} seconds.")
         sentence_ppl_high = bootstrap_sentence_ppl.confidence_interval.high
         sentence_ppl_low = bootstrap_sentence_ppl.confidence_interval.low
