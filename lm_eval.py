@@ -519,7 +519,7 @@ if __name__ == "__main__":
             extra = args.stats_extra + "\t"
             extra_col = "\t"
         params = -1
-        if model == 4:
+        if model == 4 or model == 7:
             params = lm.get_num_parameters()
 
         exists = path.isfile(args.stats_file)
