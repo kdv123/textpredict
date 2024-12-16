@@ -30,6 +30,7 @@ from language_model import alphabet
 from socket import gethostname
 from torch import set_num_threads
 from psutil import cpu_count
+import sys
 
 if __name__ == "__main__":
 
@@ -152,10 +153,12 @@ if __name__ == "__main__":
                 args.left_context = contents
         except FileNotFoundError:
             print("CANNOT OPEN LEFT CONTEXT FILE {args.left_context_file}")
+    sys.stdout.flush()
 
     # Allow passing in of space characters in the context using <sp> word
     args.left_context = args.left_context.replace("<sp>", " ")
     print(f"Prediction left context: '{args.left_context}'")
+    sys.stdout.flush()
 
     device = "cpu"
     if args.use_mps:
@@ -408,6 +411,7 @@ if __name__ == "__main__":
             srilm_file.write("\n")
             srilm_file.flush()
 
+        sys.stdout.flush()
     inference_time = timer() - start
 
     if ppl_file:
@@ -445,6 +449,7 @@ if __name__ == "__main__":
         \nmean symbol log prob = {np.average(all_symbol_log_probs):.4f} \
         \nmean sentence ppl = {avg_sentence_ppl:.4f} \
         \nppl = {ppl:.4f}")
+    sys.stdout.flush()
 
     if args.json_file:
         output_dict = {}
@@ -474,11 +479,13 @@ if __name__ == "__main__":
     if args.stats_file:
         # Single line file output, useful for running experiments
         print(f"Outputting stats to {args.stats_file}, running bootstrap on {len(all_symbol_log_probs)} samples.")
+        sys.stdout.flush()
         time_bootstrap = timer()
         bootstrap_log_prob = bootstrap(data=(all_symbol_log_probs,),
                                         statistic=np.mean,
                                         confidence_level=0.95)
         print(f"Bootstrap on log probs completed in {(timer() - time_bootstrap):.2f} seconds.")
+        sys.stdout.flush()
 
         ppl_high = pow(10, -1 * bootstrap_log_prob.confidence_interval.low)
         ppl_low = pow(10, -1 * bootstrap_log_prob.confidence_interval.high)
