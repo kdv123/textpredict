@@ -117,7 +117,7 @@ class ClassifierLanguageModel(LanguageModel):
             return []
 
         tokens = self.tokenizer.encode(text)
-        if len(tokens) > 1 and self.model_name.startswith("facebook/opt"):
+        if len(tokens) > 1 and (self.model_name.startswith("facebook/opt") or self.model_name.startswith("figmtu/opt")):
             tokens = tokens[1:]
 
         return tokens
