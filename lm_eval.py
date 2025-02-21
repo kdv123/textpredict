@@ -316,7 +316,9 @@ if __name__ == "__main__":
 
             # Optional stripped of symbols not in our set
             if args.skip_oov_symbols:
+                print(f"tokens = {tokens}")
                 tokens_stripped = [token for token in tokens if token in symbol_set]
+                print(f"tokens_stripped = {tokens_stripped}")
                 skipped_symbols += len(tokens) - len(tokens_stripped)
                 tokens = tokens_stripped
 
