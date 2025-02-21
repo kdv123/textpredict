@@ -316,9 +316,7 @@ if __name__ == "__main__":
 
             # Optional stripped of symbols not in our set
             if args.skip_oov_symbols:
-                print(f"tokens = {tokens}")
                 tokens_stripped = [token for token in tokens if token.upper() in symbol_set or token == "<sp>"]
-                print(f"tokens_stripped = {tokens_stripped}")
                 skipped_symbols += len(tokens) - len(tokens_stripped)
                 tokens = tokens_stripped
 
@@ -469,6 +467,7 @@ if __name__ == "__main__":
         \ninference time = {inference_time:.2f}\
         \nsum logprob = {sum_log_prob:.2f} \
         \nsum symbols = {sum_symbols} \
+        \nskipped symbols = {skipped_symbols} \
         \nmean symbol log prob = {np.average(all_symbol_log_probs):.4f} \
         \nmean sentence ppl = {avg_sentence_ppl:.4f} \
         \nppl = {ppl:.4f}")
@@ -483,6 +482,7 @@ if __name__ == "__main__":
         output_dict["inference_time"] = round(inference_time, 2)
         output_dict["sum_log_prob"] = round(sum_log_prob, 2)
         output_dict["sum_symbols"] = sum_symbols
+        output_dict["skipped_symbols"] = skipped_symbols
         output_dict["mean_symbol_log_prob"] = round(np.average(all_symbol_log_probs), 4)
         output_dict["mean_sentence_ppl"] = round(avg_sentence_ppl, 4)
         output_dict["ppl"] = round(ppl, 4)
