@@ -97,6 +97,9 @@ if __name__ == "__main__":
                         help="method to use for bootstrap, BCa | basic | percentile")
     parser.add_argument("--drop-start-end-words", action="store_true",
                         help="drop <s> and </s> words from phrases")
+    parser.add_argument("--skip-oov-symbols", action="store_true",
+                        help="skip symbols that aren't in our symbol set")
+
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -285,6 +288,7 @@ if __name__ == "__main__":
     zero_prob = 0
     overall_predict_time_arr = np.array([])
     overall_predict_details_arr = np.array([])
+    skipped_symbols = 0
 
     start = timer()
 
@@ -309,6 +313,13 @@ if __name__ == "__main__":
 
             # Split into characters
             tokens = sentence.split()
+
+            # Optional stripped of symbols not in our set
+            if args.skip_oov_symbols:
+                tokens_stripped = [token for token in tokens if token in symbol_set]
+                skipped_symbols += len(tokens) - len(tokens_stripped)
+                tokens = tokens_stripped
+
             symbols = len(tokens)
 
             # SRILM starts with the sentence being evaluated
