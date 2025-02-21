@@ -95,6 +95,8 @@ if __name__ == "__main__":
                         help="number of samples to use for bootstrap estimates")
     parser.add_argument("--bootstrap-method", default="BCa",
                         help="method to use for bootstrap, BCa | basic | percentile")
+    parser.add_argument("--drop-start-end-words", action="store_true",
+                        help="drop <s> and </s> words from phrases")
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -175,6 +177,9 @@ if __name__ == "__main__":
     phrase_file = open(phrases, "r")
     phrases = phrase_file.readlines()
     phrase_file.close()
+    # Optional drop start and end words from a test set file
+    if args.drop_start_end_words:
+        phrases = [phrase.replace("<s> ", "").replace(" </s>", "") for phrase in phrases]
 
     # We may want to limit to only the first so many phrases
     if args.phrase_limit:
