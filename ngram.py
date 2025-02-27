@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import Optional, List, Tuple
 from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from language_model import SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
@@ -109,10 +109,6 @@ class NGramLanguageModel(LanguageModel):
         temp_state = kenlm.State()
 
         for char in self.symbol_set:
-            # Backspace probability under the LM is 0
-            if char == BACKSPACE_CHAR:
-                next
-
             # Replace the space character with KenLM's <sp> token
             if char == SPACE_CHAR:
                 score = self.model.BaseScore(state, '<sp>', temp_state)
