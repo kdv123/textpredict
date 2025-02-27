@@ -67,7 +67,6 @@ def equally_probable(alphabet: List[str],
     --------
         list of probabilities (floats)
     """
-    # TODO: This current builds in mass for the backspace character
     n_letters = len(alphabet)
     if not specified:
         return np.full(n_letters, 1 / n_letters)

@@ -5,7 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
 from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from language_model import SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -417,7 +417,6 @@ class CausalLanguageModel(LanguageModel):
                 next_char_pred[ch] = char_probs[i]
             else:
                 next_char_pred[ch.upper()] = char_probs[i]
-        next_char_pred[BACKSPACE_CHAR] = 0.0
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
@@ -474,8 +473,6 @@ class CausalLanguageModel(LanguageModel):
         for ch in self.symbol_set:
             if ch is SPACE_CHAR:
                 self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
             else:
                 self.symbol_set_lower.append(ch.lower())
 

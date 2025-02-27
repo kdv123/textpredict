@@ -5,7 +5,6 @@ from string import ascii_uppercase
 
 # Eventually these should go away, but for now leaving to test existing code
 SPACE_CHAR = '_'
-BACKSPACE_CHAR = '<'
 
 
 # Eventually replace
@@ -18,7 +17,7 @@ def alphabet():
     -------
         array of letters.
     """
-    return list(ascii_uppercase) + [BACKSPACE_CHAR, SPACE_CHAR]
+    return list(ascii_uppercase) + [SPACE_CHAR]
 
 
 class LanguageModel(ABC):
