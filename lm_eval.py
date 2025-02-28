@@ -97,6 +97,10 @@ if __name__ == "__main__":
                         help="method to use for bootstrap, BCa | basic | percentile")
     parser.add_argument("--lora", action="store_true", default=False, help="use LoRA adapter with base model")
     parser.add_argument("--lora-path", help="huggingface or local path to LoRA adapter")
+    parser.add_argument("--drop-start-end-words", action="store_true",
+                        help="drop <s> and </s> words from phrases")
+    parser.add_argument("--skip-oov-symbols", action="store_true",
+                        help="skip symbols that aren't in our symbol set")
 
     args = parser.parse_args()
 
@@ -186,6 +190,9 @@ if __name__ == "__main__":
     phrase_file = open(phrases, "r")
     phrases = phrase_file.readlines()
     phrase_file.close()
+    # Optional drop start and end words from a test set file
+    if args.drop_start_end_words:
+        phrases = [phrase.replace("<s> ", "").replace(" </s>", "") for phrase in phrases]
 
     # We may want to limit to only the first so many phrases
     if args.phrase_limit:
@@ -293,6 +300,7 @@ if __name__ == "__main__":
     zero_prob = 0
     overall_predict_time_arr = np.array([])
     overall_predict_details_arr = np.array([])
+    skipped_symbols = 0
 
     start = timer()
 
@@ -317,6 +325,13 @@ if __name__ == "__main__":
 
             # Split into characters
             tokens = sentence.split()
+
+            # Optional stripped of symbols not in our set
+            if args.skip_oov_symbols:
+                tokens_stripped = [token for token in tokens if token.upper() in symbol_set or token == "<sp>"]
+                skipped_symbols += len(tokens) - len(tokens_stripped)
+                tokens = tokens_stripped
+
             symbols = len(tokens)
 
             # SRILM starts with the sentence being evaluated
@@ -464,6 +479,7 @@ if __name__ == "__main__":
         \ninference time = {inference_time:.2f}\
         \nsum logprob = {sum_log_prob:.2f} \
         \nsum symbols = {sum_symbols} \
+        \nskipped symbols = {skipped_symbols} \
         \nmean symbol log prob = {np.average(all_symbol_log_probs):.4f} \
         \nmean sentence ppl = {avg_sentence_ppl:.4f} \
         \nppl = {ppl:.4f}")
@@ -478,6 +494,7 @@ if __name__ == "__main__":
         output_dict["inference_time"] = round(inference_time, 2)
         output_dict["sum_log_prob"] = round(sum_log_prob, 2)
         output_dict["sum_symbols"] = sum_symbols
+        output_dict["skipped_symbols"] = skipped_symbols
         output_dict["mean_symbol_log_prob"] = round(np.average(all_symbol_log_probs), 4)
         output_dict["mean_sentence_ppl"] = round(avg_sentence_ppl, 4)
         output_dict["ppl"] = round(ppl, 4)
