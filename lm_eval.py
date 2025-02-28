@@ -22,7 +22,7 @@ from sys import exit
 from scipy.stats import bootstrap
 from datetime import datetime
 from os import path
-from language_model import alphabet
+from language_model import DEFAULT_SYMBOL_SET
 from socket import gethostname
 from torch import set_num_threads
 from psutil import cpu_count
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
     start = timer()
 
-    symbol_set = alphabet()
+    symbol_set = DEFAULT_SYMBOL_SET
     if args.extra_chars:
         for char in args.extra_chars:
             symbol_set += char
