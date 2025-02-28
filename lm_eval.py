@@ -372,7 +372,7 @@ if __name__ == "__main__":
                     zero_prob += 1
                     accum = 1
                     if verbose >= 2:
-                        print(f"p( {token} | {prev_token} ...) = 0")
+                        print(f"p( {token.replace(' ', '<sp>')} | {prev_token.replace(' ', '<sp>')} ...) = 0")
                         print(f"prediction time = {predict_time:.6f}")
                     break
                 else:
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
                     # Character-level output
                     if verbose >= 2:
-                        print(f"p( {token} | {prev_token} ...) = {p:.6f} [ {score:.6f} ]")
+                        print(f"p( {token.replace(' ', '<sp>')} | {prev_token.replace(' ', '<sp>')} ...) = {p:.6f} [ {score:.6f} ]")
                         print(f"prediction time = {predict_time:.6f}")
 
                 # SRILM line for a character looks like: "	p( w | <s> ) 	= [2gram] 0.095760 [ -1.018816 ]"
@@ -389,7 +389,7 @@ if __name__ == "__main__":
                     if i > 0:
                         extra = " ..."
                     # The 1gram bit is only relevant for the n-gram, we'll just hard code to 1gram for everything
-                    srilm_file.write(f"\tp( {token.replace('_', '<sp>')} | {prev_token.replace('_', '<sp>')}{extra}) \t= [1gram] {p:.6f} [ {score:.6f} ]\n")
+                    srilm_file.write(f"\tp( {token.replace(' ', '<sp>')} | {prev_token.replace(' ', '<sp>')}{extra}) \t= [1gram] {p:.6f} [ {score:.6f} ]\n")
 
                 accum += score
                 prev_token = token
