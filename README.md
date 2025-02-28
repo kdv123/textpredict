@@ -14,4 +14,4 @@ See: https://docs.anaconda.com/anaconda/install/linux/
 % pip install 'git+https://github.com/potamides/uniformers.git#egg=uniformers'
 % pip install --upgrade transformers
 % pip install kenlm==0.1 --global-option="--max_order=12"
-% pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate
+% pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate peft

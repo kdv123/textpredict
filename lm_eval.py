@@ -95,12 +95,23 @@ if __name__ == "__main__":
                         help="number of samples to use for bootstrap estimates")
     parser.add_argument("--bootstrap-method", default="BCa",
                         help="method to use for bootstrap, BCa | basic | percentile")
+    parser.add_argument("--lora", action="store_true", default=False, help="use LoRA adapter with base model")
+    parser.add_argument("--lora-path", help="huggingface or local path to LoRA adapter")
+
     args = parser.parse_args()
 
     verbose = args.verbose
     model = args.model
     phrases = args.phrases
 
+    if args.lora and not model == 4:
+        print("ERROR: LoRA adapter is only currently supported for causal model")
+        exit(1)
+
+    if args.lora and not args.lora_path:
+        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model.")
+        exit(1)
+    
     if model == 3 and not args.ngram_lm:
         print("ERROR: For n-gram model you must specify filename of model using --ngram-lm")
         exit(1)
@@ -213,7 +224,9 @@ if __name__ == "__main__":
                                  fp16=args.fp16,
                                  mixed_case_context=args.mixed_case_context,
                                  case_simple=args.case_simple,
-                                 max_completed=args.max_completed)
+                                 max_completed=args.max_completed,
+                                 lora=args.lora,
+                                 lora_path=args.lora_path)
     elif model == 5:
         lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
                                   lang_model_name=args.model_name,

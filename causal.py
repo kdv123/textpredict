@@ -11,7 +11,7 @@ from scipy.special import softmax
 import time
 from collections import defaultdict
 from typing import Final
-
+from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
 
 class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal model, GPT-2 by default."""
@@ -27,6 +27,8 @@ class CausalLanguageModel(LanguageModel):
                  mixed_case_context: bool = False,
                  case_simple: bool = False,
                  max_completed: int = None,
+                 lora: bool = False,
+                 lora_path: str = "",
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -41,6 +43,8 @@ class CausalLanguageModel(LanguageModel):
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
+            lora               - use LoRA adapter
+            lora_path          - load LoRA adapter from Hugging Face or local directory
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -58,7 +62,13 @@ class CausalLanguageModel(LanguageModel):
         self.mixed_case_context = mixed_case_context
         self.case_simple = case_simple
         self.max_completed = max_completed
+        self.lora = lora
+        self.lora_path = lora_path
 
+        if lora and not lora_path:
+            print(f"ERROR: Must specify path to LoRA adapter")
+            exit(1)
+        
         if not max_completed and not beam_width:
             print(f"WARNING: using causal language model without any pruning, this can be slow!")
         else:
@@ -428,12 +438,27 @@ class CausalLanguageModel(LanguageModel):
             raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
         self.vocab_size = self.tokenizer.vocab_size
         try:
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
+            if self.lora:
+                self.model = AutoPeftModelForCausalLM.from_pretrained(self.lora_path)
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
             if self.fp16 and self.device == "cuda":
                 self.model = self.model.half()
         except:
             raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
 
+#        if self.lora:
+#            try:
+#                config = PeftConfig.from_pretrained(self.lora_path)
+#                peft_model = PeftModel.from_pretrained(self.model, config)
+#                peft_model.set_adapter("lora")
+#                self.model = peft_model
+                #                self.model = peft_model.merge_and_unload()
+#                self.model.load_adapter(self.lora_path)
+#                self.model.enable_adapters()
+#            except:
+#                raise InvalidLanguageModelException(f"Failed to load LoRA adapter. Ensure {self.lora_path} is a valid LoRA adapter.")
+        
         self.model.eval()
 
         self.model.to(self.device)
