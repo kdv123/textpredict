@@ -11,10 +11,7 @@
 from ngram import NGramLanguageModel
 from mixture import MixtureLanguageModel
 from causal import CausalLanguageModel
-from seq2seq import Seq2SeqLanguageModel
-from causal_byte import CausalByteLanguageModel
 from uniform import UniformLanguageModel
-from classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
@@ -38,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", type=int, default=0,
                         help="0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character")
     parser.add_argument("--model", type=int, required=True,
-                        help=("3: KenLM n-gram\n4: Causal Hugging Face\n5: Seq2Seq\n6: Mixture (Causal/Ngram\n7: Causal Byte\n8: Uniform\n9: Mix (Casual Byte/Ngram)\n10: Classifier"))
+                        help=("3: KenLM n-gram\n4: Causal Hugging Face\n6: Mixture (Causal/Ngram\n8: Uniform"))
     parser.add_argument("--phrases", type=str, required=True,
                         help="Phrase set filename")
     parser.add_argument("--model-name",
@@ -223,11 +220,13 @@ if __name__ == "__main__":
                                  case_simple=args.case_simple,
                                  max_completed=args.max_completed)
     elif model == 5:
-        lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
-                                  lang_model_name=args.model_name,
-                                  lm_device=device,
-                                  lm_path=args.model_dir,
-                                  lm_left_context=args.left_context)
+        print(f'ERROR: Seq2seq model not yet supported in this version')
+        exit(1)
+        # lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
+        #                           lang_model_name=args.model_name,
+        #                           lm_device=device,
+        #                           lm_path=args.model_dir,
+        #                           lm_left_context=args.left_context)
     elif model == 6:
         lm = MixtureLanguageModel(symbol_set=symbol_set,
                                   lm_types=["CAUSAL", "NGRAM"],
@@ -244,39 +243,45 @@ if __name__ == "__main__":
                                             },
                                             {"lm_path": args.ngram_lm}])
     elif model == 7:
-        lm = CausalByteLanguageModel(symbol_set=symbol_set,
-                                     lang_model_name=args.model_name,
-                                     lm_device=device,
-                                     lm_path=args.model_dir,
-                                     lm_left_context=args.left_context,
-                                     fp16=args.fp16,
-                                     mixed_case_context=args.mixed_case_context,
-                                     case_simple=args.case_simple)
+        print(f"ERROR: Causal Byte model not yet supported by this version")
+        exit(1)
+        # lm = CausalByteLanguageModel(symbol_set=symbol_set,
+        #                              lang_model_name=args.model_name,
+        #                              lm_device=device,
+        #                              lm_path=args.model_dir,
+        #                              lm_left_context=args.left_context,
+        #                              fp16=args.fp16,
+        #                              mixed_case_context=args.mixed_case_context,
+        #                              case_simple=args.case_simple)
     elif model == 8:
         lm = UniformLanguageModel(symbol_set=symbol_set)
     elif model == 9:
-        lm = MixtureLanguageModel(symbol_set=symbol_set,
-                                  lm_types=["CAUSALBYTE", "NGRAM"],
-                                  lm_weights=[1.0 - args.ngram_mix, args.ngram_mix],
-                                  lm_params=[{"lang_model_name": args.model_name,
-                                             "lm_device": device,
-                                             "lm_path": args.model_dir,
-                                             "lm_left_context": args.left_context,
-                                             "fp16": args.fp16,
-                                             "mixed_case_context": args.mixed_case_context,
-                                             "case_simple": args.case_simple,
-                                            },
-                                            {"lm_path": args.ngram_lm}])
+        print(f'ERROR: Causal Byte model not yet supported in this version')
+        exit(1)
+        # lm = MixtureLanguageModel(symbol_set=symbol_set,
+        #                           lm_types=["CAUSALBYTE", "NGRAM"],
+        #                           lm_weights=[1.0 - args.ngram_mix, args.ngram_mix],
+        #                           lm_params=[{"lang_model_name": args.model_name,
+        #                                      "lm_device": device,
+        #                                      "lm_path": args.model_dir,
+        #                                      "lm_left_context": args.left_context,
+        #                                      "fp16": args.fp16,
+        #                                      "mixed_case_context": args.mixed_case_context,
+        #                                      "case_simple": args.case_simple,
+        #                                     },
+        #                                     {"lm_path": args.ngram_lm}])
     elif model == 10:
-        lm = ClassifierLanguageModel(symbol_set=symbol_set,
-                                     lang_model_name=args.model_name,
-                                     lm_path=args.model_dir,
-                                     lm_device=device,
-                                     lm_left_context=args.left_context,
-                                     beam_width=args.beam_width,
-                                     fp16=args.fp16,
-                                     mixed_case_context=args.mixed_case_context,
-                                     case_simple=args.case_simple)
+        print(f'ERROR: Classifier model not yet supported in this version')
+        exit(1)
+        # lm = ClassifierLanguageModel(symbol_set=symbol_set,
+        #                              lang_model_name=args.model_name,
+        #                              lm_path=args.model_dir,
+        #                              lm_device=device,
+        #                              lm_left_context=args.left_context,
+        #                              beam_width=args.beam_width,
+        #                              fp16=args.fp16,
+        #                              mixed_case_context=args.mixed_case_context,
+        #                              case_simple=args.case_simple)
     else:
         parser.print_help()
         exit()
