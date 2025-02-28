@@ -70,6 +70,3 @@ zip-safe = true
 # distribution package (and therefore become importable)
 [tool.setuptools.packages.find]
 exclude = ["examples", "scripts"]
-
-[tool.distutils.bdist_wheel]
-universal = true
