@@ -1,0 +1,421 @@
+#!/usr/bin/env python
+# Calculates per-word perplexity on a set of sentences using a language model.
+
+from ambiguous import AmbiguousLanguageModel
+from math import log10
+from timeit import default_timer as timer
+import argparse
+import string
+import json
+import numpy as np
+from sys import exit
+from scipy.stats import bootstrap
+from datetime import datetime
+from os import path
+from language_model import SPACE_CHAR
+from language_model import alphabet
+from socket import gethostname
+from torch import set_num_threads
+from psutil import cpu_count
+import sys
+
+character_groups = {1: ['a','b','c','d','e'], 2: ['f','g','h','i','j','k','l','m'], 3: ['n','o','p','q','r'], 4: ['s','t','u','v','w','x','y','z','\'']}
+
+def ambiguate_word(text: str) -> str:
+    groups = ''
+    for ch in text:
+        group = [a for a, b in character_groups.items() if ch in b]
+        if len(group) == 1:
+            groups += str(group[0])
+        else:
+            return None
+    return groups
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", type=int, default=0,
+                        help="0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character")
+    parser.add_argument("--phrases", type=str, required=True,
+                        help="Phrase set filename")
+    parser.add_argument("--model-name",
+                        help="Model name of causal model")
+    parser.add_argument("--model-dir",
+                        help="Local directory to load fine-tuned causal model")
+    parser.add_argument("--use-mps",
+                        action="store_true",
+                        help="Use MPS Apple Silicon GPU during inference")
+    parser.add_argument("--use-cuda",
+                        action="store_true",
+                        help="Use CUDA GPU during inference")
+    parser.add_argument("--left-context", default="",
+                        help="left language model context for causal model")
+    parser.add_argument("--left-context-file", default="",
+                        help="name of file containing the left language model context for causal model. Context using --left-context takes priority.")
+    parser.add_argument("--add-char", action="append", dest="extra_chars",
+                        help="add character to symbol set")
+    parser.add_argument("--time-outliers", action="store_true",
+                        help="print time outliers at end")
+    parser.add_argument("--stats-file",
+                        help="write summary stats to specified file")
+    parser.add_argument("--stats-extra",
+                        help="extra string to write to stats file as first column")
+    parser.add_argument("--phrase-limit", type=int,
+                        help="max phrases to evaluate")
+    parser.add_argument("--beam-width", type=int,
+                        help="search beam width for causal LM, recommended value = 8")
+    parser.add_argument("--max-completed", type=int,
+                        help="stop causal LM search after this many completed hypotheses, recommended value = 32000")
+    parser.add_argument("--completions", action="store_true", default=False,
+                        help="Allow model to predict word completions in addition to exact disambiguations.")
+    parser.add_argument("--ppl-file",
+                        help="output sentence and ppl to a file")
+    parser.add_argument("--symbol-file",
+                        help="output symbol log probs to a file")
+    parser.add_argument("--json-file",
+                        help="Output overall model data to JSON file with specified file name.")
+    parser.add_argument("--fp16", action="store_true",
+                        help="convert model to fp16 (CUDA only)")
+    parser.add_argument("--mixed-case-context", action="store_true", default=False,
+                        help="use mixed case left context")
+    parser.add_argument("--case-simple", action="store_true", default=False,
+                        help="simple automatic casing of let context")
+    parser.add_argument("--num-cores", type=int,
+                        help="limit pytorch to specified number of cores")
+    parser.add_argument("--bootstrap-samples", type=int, default=9999,
+                        help="number of samples to use for bootstrap estimates")
+    parser.add_argument("--bootstrap-method", default="BCa",
+                        help="method to use for bootstrap, BCa | basic | percentile")
+    args = parser.parse_args()
+
+    verbose = args.verbose
+    phrases = args.phrases
+
+    if args.case_simple and not args.mixed_case_context:
+        print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
+
+    # Handy stuff to print out in our log files
+    print(f"START: {datetime.now()}")
+    print(f"ARGS: {args}")
+    print(f"HOSTNAME: {gethostname()}")
+
+    rng = np.random.default_rng(234893458942534)
+
+    if args.num_cores:
+        # User has specified their desired number of cores
+        set_num_threads(args.num_cores)
+        print(f"Limiting pytorch to {args.num_cores} cores")
+    elif args.use_cuda:
+        # Testing showed more CPU cores did not improve inference speed when a GPU is being used
+        set_num_threads(1)
+        print(f"Using CUDA, limiting pytorch to 1 core. You can override with --num-cores but might no speed things up")
+    else:
+        # Testing showed CPU only inference didn't get faster after 32 cores
+        physical_cores = cpu_count(logical=False)
+        max_useful_cores = 32
+        if physical_cores > max_useful_cores:
+            set_num_threads(max_useful_cores)
+            print(f"Limiting pytorch to {max_useful_cores} cores. You can override with --num-cores but might no speed things up")
+    
+    if args.left_context_file != "" and args.left_context == "":
+        try:
+            with open(args.left_context_file, "r", encoding="utf-8") as f:
+                contents = ""
+                for line in f:
+                    if line not in string.whitespace:
+                        contents += f" {line.rstrip()}"
+                contents = contents.strip()
+                args.left_context = contents
+        except FileNotFoundError:
+            print("CANNOT OPEN LEFT CONTEXT FILE {args.left_context_file}")
+    sys.stdout.flush()
+
+    # Allow passing in of space characters in the context using <sp> word
+    args.left_context = args.left_context.replace("<sp>", " ")
+    print(f"Prediction left context: '{args.left_context}'")
+    sys.stdout.flush()
+
+    device = "cpu"
+    if args.use_mps:
+        device = "mps"
+    elif args.use_cuda:
+        device = "cuda"
+
+    # Read in the phrase file
+    phrase_file = open(phrases, "r")
+    phrases = phrase_file.readlines()
+    phrase_file.close()
+
+    # We may want to limit to only the first so many phrases
+    if args.phrase_limit:
+        while len(phrases) > args.phrase_limit:
+            phrases.pop()
+
+    lm = None
+
+    ppl_file = None
+    if args.ppl_file:
+        ppl_file = open(args.ppl_file, "w")
+
+    start = timer()
+
+    symbol_set = alphabet()
+    if args.extra_chars:
+        for char in args.extra_chars:
+            symbol_set += char
+        print(f"Modified symbol_set: {symbol_set}")
+
+    lm = AmbiguousLanguageModel(symbol_set, beam_width=args.beam_width, max_completed=args.max_completed, completions=args.completions)
+
+    print(f"Model load time = {timer() - start:.2f}")
+
+    phrase_count = 0
+    sum_per_word_logprob = 0.0
+    zero_prob = 0
+    overall_predict_time_arr = np.array([])
+    overall_predict_details_arr = np.array([])
+
+    index_distribution = {}
+    
+    start = timer()
+
+    sum_log_prob = 0.0
+    sum_words = 0
+    all_word_log_probs = []
+    all_sentence_ppls = []
+
+    # Iterate over phrases
+    for phrase in phrases:
+        num_words = 0
+        accum = 0.0
+        sent_ppl = 0.0
+
+        sentence = phrase.strip()
+        if len(sentence) > 0:
+            accum = 0.0
+
+            # Phrase-level output
+            if verbose >= 1:
+                print(f"sentence = '{sentence}'")
+
+            # Split into characters
+            tokens = sentence.split()
+            sentence = "".join(tokens)
+            words = sentence.split("<sp>")
+
+            num_words = len(words)
+
+            context = ""
+
+            predict_time_arr = np.array([])
+            predict_details_arr = np.array([])
+
+            # Iterate over characters in phrase
+            for (i, word) in enumerate(words):
+                start_predict = timer()
+                correct_word = word.upper()
+
+                score = 0.0
+                groups = ambiguate_word(word)
+                pred = lm.predict(list(context), list(groups))
+
+                predict_time = timer() - start_predict
+                predict_time_arr = np.append(predict_time_arr, predict_time)
+                predict_details_arr = np.append(predict_details_arr,
+                                                f"sentence = {sentence}, index = {i}, p( {word} | {context} )")
+
+                # Find the probability for the correct character
+                try:
+                    index = [c[0] for c in pred].index(correct_word)
+                    score = pred[index][1]
+                    p = 10 ** score
+                    if index in index_distribution.keys():
+                        index_distribution[index] += 1
+                    else:
+                        index_distribution[index] = 1
+                    # Word-level output
+                    if verbose >= 2:
+                        print(f"p( {word} | {context} ...) = {p:.6f} [ {score:.6f} ]")
+                        print(f"prediction time = {predict_time:.6f}")
+                    accum += score
+                    all_word_log_probs.append(score)
+                except:
+                    zero_prob += 1
+                    accum = 1
+                    if verbose >= 2:
+                        print(f"p( {word} | {context} ...) = 0")
+                        print(f"prediction time = {predict_time:.6f}")
+                    break
+                    
+                context += word + " "
+
+            # Compute summary stats on prediction times for this phrase
+            per_word_time = np.average(predict_time_arr)
+            phrase_std = np.std(predict_time_arr)
+            phrase_max = np.max(predict_time_arr)
+            phrase_min = np.min(predict_time_arr)
+
+            # Add this phrase's prediction times to overall array
+            overall_predict_time_arr = np.append(overall_predict_time_arr, predict_time_arr, axis=None)
+            overall_predict_details_arr = np.append(overall_predict_details_arr, predict_details_arr, axis=None)
+
+            if accum == 1:
+                if verbose >= 1:
+                    print("Zero-prob event encountered, terminating phrase")
+                    print(f"per-word prediction time = {per_word_time:.6f} +/- {phrase_std:.6f} [{phrase_min:.6f}, "
+                          f"{phrase_max:.6f}]\n")
+            else:
+                per_word_logprob = accum / num_words
+                sent_ppl = pow(10, -1 * per_word_logprob)
+
+                all_sentence_ppls.append(sent_ppl)
+
+                # Phrase-level output
+                if verbose >= 1:
+                    print(f"sum logprob = {accum:.4f}, per-word logprob = {per_word_logprob:.4f}, ppl = {sent_ppl:.4f}")
+                    print(f"per-word prediction time = {per_word_time:.6f} +/- {phrase_std:.6f} [{phrase_min:.6f}, {phrase_max:.6f}]\n")
+
+                sum_per_word_logprob += per_word_logprob
+                phrase_count += 1
+
+                # Optional output to a file with a sentence and its ppl and log prob
+                if ppl_file:
+                    ppl_file.write(f"{sent_ppl:.4f}\t{accum:.4f}\t{sentence}\n")
+                    ppl_file.flush()
+
+                # To calculate the overall file perplexity, we need the sum of log probs of all sentences.
+                # This is how SRILM does it and makes it less sensitive to particular outlier sentences.
+                sum_log_prob += accum
+                sum_words += num_words
+
+            print(index_distribution)
+        sys.stdout.flush()
+    inference_time = timer() - start
+
+    if ppl_file:
+        ppl_file.close()
+
+    overall_per_symbol_time = np.average(overall_predict_time_arr)
+    overall_std_time = np.std(overall_predict_time_arr)
+    overall_min_time = np.min(overall_predict_time_arr)
+    overall_max_time = np.max(overall_predict_time_arr)
+
+    ci_floor = overall_per_symbol_time - (2 * overall_std_time)
+    ci_ceiling = overall_per_symbol_time + (2 * overall_std_time)
+
+    ppl = float("+inf")
+    if sum_words > 0:
+        ppl = pow(10, -1 * sum_log_prob / sum_words)
+
+    avg_sentence_ppl = np.average(all_sentence_ppls)
+
+    # Model-level output
+    print(f"OVERALL \
+        \nphrases = {phrase_count}, \
+        \nzero-prob events = {zero_prob} \
+        \nper-word prediction time = {overall_per_word_time:.6f} +/- {overall_std_time:.6f} [{overall_min_time:.6f}, {overall_max_time:.6f}] \
+        \n95% CI = [{ci_floor:.6f}, {ci_ceiling:.6f}] \
+        \ninference time = {inference_time:.2f}\
+        \nsum logprob = {sum_log_prob:.2f} \
+        \nsum words = {sum_words} \
+        \nmean word log prob = {np.average(all_word_log_probs):.4f} \
+        \nmean sentence ppl = {avg_sentence_ppl:.4f} \
+        \nppl = {ppl:.4f}")
+    sys.stdout.flush()
+
+    if args.json_file:
+        output_dict = {}
+        output_dict["phrases"] = phrase_count
+        output_dict["zero_prob_events"] = zero_prob
+        output_dict["per_word_predict_time"] = f"{overall_per_word_time:.6f} +/- {overall_std_time:.6f} [{overall_min_time:.6f}, {overall_max_time:.6f}]"
+        output_dict["confidence_interval"] = f"[{ci_floor:.6f}, {ci_ceiling:.6f}]"
+        output_dict["inference_time"] = round(inference_time, 2)
+        output_dict["sum_log_prob"] = round(sum_log_prob, 2)
+        output_dict["sum_words"] = sum_words
+        output_dict["mean_word_log_prob"] = round(np.average(all_word_log_probs), 4)
+        output_dict["mean_sentence_ppl"] = round(avg_sentence_ppl, 4)
+        output_dict["ppl"] = round(ppl, 4)
+
+        with open(args.json_file, "w", encoding="utf-8") as f:
+            json.dump(output_dict, f, indent=4)
+            f.write("\n")
+
+    # Optional fill that contains the log prob of each prediction
+    # Could be useful for recomputing confidence intervals or such
+    if args.symbol_file:
+        symbol_file = open(args.symbol_file, "w")
+        for log_prob in all_symbol_log_probs:
+            symbol_file.write(str(log_prob) + "\n")
+        symbol_file.close()
+
+    if args.stats_file:
+        # Single line file output, useful for running experiments
+        print(f"Outputting stats to {args.stats_file}, running bootstrap on {len(all_symbol_log_probs)} samples.")
+        sys.stdout.flush()
+        time_bootstrap = timer()
+        bootstrap_log_prob = bootstrap(data=(all_word_log_probs,),
+                                        statistic=np.mean,
+                                        confidence_level=0.95,
+                                        n_resamples=args.bootstrap_samples,
+                                        method=args.bootstrap_method,
+                                        random_state=rng)
+        print(f"Bootstrap on log probs completed in {(timer() - time_bootstrap):.2f} seconds.")
+        sys.stdout.flush()
+
+        ppl_high = pow(10, -1 * bootstrap_log_prob.confidence_interval.low)
+        ppl_low = pow(10, -1 * bootstrap_log_prob.confidence_interval.high)
+        error_bar = (ppl_high - ppl_low) / 2.0
+
+        print(f"Outputting stats to {args.stats_file}, running bootstrap on {len(all_sentence_ppls)} samples.")
+        sys.stdout.flush()
+        time_bootstrap = timer()
+        bootstrap_sentence_ppl = bootstrap(data=(all_sentence_ppls,),
+                                            statistic=np.mean,
+                                            confidence_level=0.95,
+                                            n_resamples=args.bootstrap_samples,
+                                            method=args.bootstrap_method,
+                                            random_state=rng)
+        print(f"Bootstrap on sentence ppls completed in {(timer() - time_bootstrap):.2f} seconds.")
+        sentence_ppl_high = bootstrap_sentence_ppl.confidence_interval.high
+        sentence_ppl_low = bootstrap_sentence_ppl.confidence_interval.low
+        sentence_ppl_error_bar = (sentence_ppl_high - sentence_ppl_low) / 2.0
+
+        extra = ""
+        extra_col = ""
+        if args.stats_extra:
+            extra = args.stats_extra + "\t"
+            extra_col = "\t"
+        params = -1
+        if model == 4:
+            params = lm.get_num_parameters()
+
+        exists = path.isfile(args.stats_file)
+        with open(args.stats_file, 'a') as file:
+            if not exists:
+                # Header if the stats file doesn't already exist
+                file.write(f"{extra_col}ppl\tsum_log_prob\tsum_words\tboot_ppl_pm\tboot_ppl_low\tboot_ppl_high\tphrases\ttime\tparams\tdate_time\tper_word_time\tsd_per_word_time\tsentence_ppl\tboot_sentence_ppl\n")
+            file.write(f"{extra}"
+                         f"{ppl:.6f}"
+                         f"\t{sum_log_prob:.6f}"
+                         f"\t{sum_words}"
+                         f"\t{error_bar:.6f}"
+                         f"\t{ppl_low:.6f}"
+                         f"\t{ppl_high:.6f}"
+                         f"\t{phrase_count}"
+                         f"\t{inference_time:.6f}"
+                         f"\t{params}"
+                         f"\t{datetime.now()}"
+                         f"\t{overall_per_word_time:.6e}"
+                         f"\t{overall_std_time:.6e}"
+                         f"\t{avg_sentence_ppl:.6f}"
+                         f"\t{sentence_ppl_error_bar:.6f}"
+                         f"\n")
+
+    # Optionally print the predictions that took an abnormal amount of time
+    if args.time_outliers:
+        for (i, time) in enumerate(overall_predict_time_arr):
+            if time < ci_floor:
+                print(f"LOW OUTLIER: {overall_predict_details_arr[i]}, predict time = {time:.6f}\n")
+            if time > ci_ceiling:
+                print(f"HIGH OUTLIER: {overall_predict_details_arr[i]}, predict time = {time:.6f}\n")
+
