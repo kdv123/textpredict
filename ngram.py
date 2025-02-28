@@ -1,7 +1,6 @@
 from collections import Counter
 from typing import Optional, List, Tuple
 from language_model import LanguageModel
-from language_model import SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
@@ -41,7 +40,7 @@ class NGramLanguageModel(LanguageModel):
         evidence_str = ''.join(context).lower()
 
         for i, ch in enumerate(context):
-            if ch == SPACE_CHAR:
+            if ch == ' ':
                 context[i] = "<sp>"
 
         self.model.BeginSentenceWrite(self.state)
@@ -110,7 +109,7 @@ class NGramLanguageModel(LanguageModel):
 
         for char in self.symbol_set:
             # Replace the space character with KenLM's <sp> token
-            if char == SPACE_CHAR:
+            if char == ' ':
                 score = self.model.BaseScore(state, '<sp>', temp_state)
             else:
                 score = self.model.BaseScore(state, char.lower(), temp_state)
