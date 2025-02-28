@@ -1,0 +1,74 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61.0", "wheel>=0.37.1"]
+
+[project]
+name = "aac-textpredict"
+version = "0.1.0"
+authors = [
+    {name="Dylan Gaines", email="dcgaines@mtu.edu"},
+    {name="Keith Vertanen", email="vertanen@mtu.edu"},
+    {name="CAMBI", email="cambi_support@googlegroups.com"},
+]
+description = "Text prediction toolkit for Augmentative and Alternative Communication."
+readme = "README.md"
+requires-python = ">3.8,<3.11"
+classifiers = [
+    'License :: Other/Proprietary License',
+    'Topic :: Scientific/Engineering :: Human Machine Interfaces',
+    'Topic :: Natural Language :: English',
+    'Intended Audience :: Science/Research',
+    'Intended Audience :: End Users/Desktop',
+    'Intended Audience :: Developers',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+]
+
+dependencies = [
+    "torch==2.2.0",
+    "torchvision==0.17.1",
+    "torchaudio==2.2.0",
+    "datasets==2.20.0",
+    "bitsandbytes==0.43.3",
+    "requests==2.32.3",
+    "kenlm==0.1",
+    "nlpaug==1.1.11",
+    "psutil==6.0.0",
+    "ipywidgets==8.1.3",
+    "sentencepiece==0.2.0",
+    "protobuf==4.25.3",
+    "evaluate==0.4.0",
+    "scikit-learn==1.2.2",
+    "accelerate==0.33.0",
+    "transformers==4.36.0",
+    "numpy==1.24.4",
+]
+
+[project.license]
+file = "LICENSE.md"
+
+[project.optional-dependencies]
+release = [
+    "twine==3.2.0",
+    "build==1.2.2.post1",
+    "wheel==0.43.0",
+]
+
+[project.urls]
+"Homepage" = "https://www.cambi.tech/"
+"Source" = "https://github.com/kdv123/textpredict"
+
+[tool.setuptools]
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+platforms = ["Linux", "Windows", "Mac OS-X"]
+include-package-data = true
+zip-safe = true
+
+# Python modules and packages that are included in the
+# distribution package (and therefore become importable)
+[tool.setuptools.packages.find]
+exclude = ["examples", "scripts"]
+
+[tool.distutils.bdist_wheel]
+universal = true
