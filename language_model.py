@@ -3,11 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple
 from string import ascii_uppercase
 
-# Eventually these should go away, but for now leaving to test existing code
-SPACE_CHAR = '_'
-
-
-# Eventually replace
+# Returns all uppercase English letters
 def alphabet():
     """Alphabet.
 
@@ -17,8 +13,9 @@ def alphabet():
     -------
         array of letters.
     """
-    return list(ascii_uppercase) + [SPACE_CHAR]
+    return list(ascii_uppercase)
 
+DEFAULT_SYMBOL_SET = alphabet() + [' ']
 
 class LanguageModel(ABC):
     """Parent class for Language Models."""
@@ -26,7 +23,7 @@ class LanguageModel(ABC):
     symbol_set: List[str] = None
 
     def __init__(self,
-                 symbol_set: List[str]):
+                 symbol_set: List[str] = DEFAULT_SYMBOL_SET):
         self.symbol_set = symbol_set
 
     @classmethod

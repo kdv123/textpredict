@@ -25,7 +25,6 @@ from sys import exit
 from scipy.stats import bootstrap
 from datetime import datetime
 from os import path
-from language_model import SPACE_CHAR
 from language_model import alphabet
 from socket import gethostname
 from torch import set_num_threads
@@ -353,10 +352,10 @@ if __name__ == "__main__":
                 start_predict = timer()
                 correct_char = ""
 
-                # BciPy treats space as underscore
+                # Replace the symbolic <sp> token with a space
                 if (token == "<sp>"):
-                    token = SPACE_CHAR
-                    correct_char = SPACE_CHAR
+                    token = ' '
+                    correct_char = ' '
                 else:
                     correct_char = token.upper()
                 score = 0.0

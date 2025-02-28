@@ -5,7 +5,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
 from language_model import LanguageModel
-from language_model import SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -121,10 +120,6 @@ class CausalLanguageModel(LanguageModel):
             # Check if all the characters in the subword token are in our valid symbol set
             valid = True
             for ch in word_lower:
-                # The space char is only valid once we convert spaces to the space char
-                if ch == SPACE_CHAR:
-                    valid = False
-                    break
                 if ch == ' ':
                     continue
                 elif ch not in self.symbol_set_lower:
@@ -136,7 +131,7 @@ class CausalLanguageModel(LanguageModel):
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
                 for j in range(len(word)):
-                    key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
+                    key = word_lower[0:j + 1]
                     self.vocab[key] += i,
                     # Construct set for prefix of the word
                     self.vocab_set[key].add(i)
@@ -212,9 +207,7 @@ class CausalLanguageModel(LanguageModel):
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
 
-        converted_context = "".join(evidence)
-        converted_context_lower = converted_context.lower()
-        context = converted_context.replace(SPACE_CHAR, ' ')
+        context = "".join(evidence)
 
         # If using the simple case feature, we need to go through the actual
         # left context and capitalize the first letter in the sentence as
@@ -324,7 +317,7 @@ class CausalLanguageModel(LanguageModel):
                 extra_vocab_set = set()
 
                 # Extending this hypothesis must match the remaining text
-                remaining_context = converted_context_lower[current[LEN]:]
+                remaining_context = context_lower[current[LEN]:]
                 if len(remaining_context) == 0:
                     # There is no remaining context thus all subword tokens that are valid under our symbol set
                     # should be considered when computing the probability of the next character.
@@ -396,15 +389,9 @@ class CausalLanguageModel(LanguageModel):
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
         for ch in self.symbol_set_lower:
-            # Convert space to the underscore used in BciPy
-            if ch == SPACE_CHAR:
-                target_ch = ' '
-            else:
-                target_ch = ch
-
             # Handle cases when symbols are never seen
-            if target_ch in char_to_log_probs:
-                char_probs += logsumexp(char_to_log_probs[target_ch]),
+            if ch in char_to_log_probs:
+                char_probs += logsumexp(char_to_log_probs[ch]),
             else:
                 char_probs += float("-inf"),
 
@@ -413,10 +400,8 @@ class CausalLanguageModel(LanguageModel):
 
         next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
+            # This works even if ch is a space
+            next_char_pred[ch.upper()] = char_probs[i]
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
@@ -471,10 +456,8 @@ class CausalLanguageModel(LanguageModel):
         self.symbol_set_lower = []
 
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            else:
-                self.symbol_set_lower.append(ch.lower())
+            # This works even if ch is a space            
+            self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
 

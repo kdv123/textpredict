@@ -1,7 +1,7 @@
 """Uniform language model"""
 from typing import Dict, List, Tuple, Union, Optional
 import numpy as np
-from language_model import LanguageModel
+from language_model import LanguageModel, DEFAULT_SYMBOL_SET
 
 
 class UniformLanguageModel(LanguageModel):
@@ -15,7 +15,7 @@ class UniformLanguageModel(LanguageModel):
     """
 
     def __init__(self,
-                 symbol_set: Optional[List[str]] = None):
+                 symbol_set: Optional[List[str]] = DEFAULT_SYMBOL_SET):
         super().__init__(symbol_set=symbol_set)
 
     def predict(self, evidence: Union[str, List[str]]) -> List[Tuple]:
