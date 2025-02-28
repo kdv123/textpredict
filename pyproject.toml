@@ -27,14 +27,14 @@ classifiers = [
 
 dependencies = [
     "torch==2.2.0",
-    "torchvision==0.17.1",
+    "torchvision==0.17.0",
     "torchaudio==2.2.0",
-    "datasets==2.20.0",
-    "bitsandbytes==0.43.3",
+    "datasets==2.0.0",
+    "bitsandbytes==0.42.0",
     "requests==2.32.3",
     "kenlm==0.1",
     "nlpaug==1.1.11",
-    "psutil==6.0.0",
+    "psutil==5.7.2",
     "ipywidgets==8.1.3",
     "sentencepiece==0.2.0",
     "protobuf==4.25.3",
@@ -43,6 +43,7 @@ dependencies = [
     "accelerate==0.33.0",
     "transformers==4.36.0",
     "numpy==1.24.4",
+    "tqdm==4.62.2",
 ]
 
 [project.license]
@@ -50,7 +51,7 @@ file = "LICENSE.md"
 
 [project.optional-dependencies]
 release = [
-    "twine==3.2.0",
+    "twine==5.0.0",
     "build==1.2.2.post1",
     "wheel==0.43.0",
 ]
