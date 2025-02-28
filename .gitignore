@@ -1,1 +1,3 @@
 __pycache__/
+dist/
+aac_textpredict.egg-info/
