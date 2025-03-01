@@ -3,8 +3,8 @@ from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
-from language_model import LanguageModel
-from exceptions import InvalidLanguageModelException
+from aactextpredict.language_model import LanguageModel
+from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
 import time
