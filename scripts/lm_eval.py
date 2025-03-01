@@ -208,8 +208,8 @@ if __name__ == "__main__":
     if model == 3:
         lm = NGramLanguageModel(symbol_set, args.ngram_lm, args.skip_norm)
     elif model == 4:
-        lm = CausalLanguageModel(symbol_set=symbol_set,
-                                 lang_model_name=args.model_name,
+        lm = CausalLanguageModel(lang_model_name=args.model_name,
+                                 symbol_set=symbol_set,
                                  lm_device=device,
                                  lm_path=args.model_dir,
                                  lm_left_context=args.left_context,
