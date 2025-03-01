@@ -8,13 +8,13 @@
 #   5) Mixture model using linear interpolation, mixture of the above types
 #   6) Causal LLM with a classification layer, requires downstream task training using AutoModelForSequenceClassification
 
-from ngram import NGramLanguageModel
-from mixture import MixtureLanguageModel
-from causal import CausalLanguageModel
-from seq2seq import Seq2SeqLanguageModel
-from causal_byte import CausalByteLanguageModel
-from uniform import UniformLanguageModel
-from classifier import ClassifierLanguageModel
+from aactextpredict.ngram import NGramLanguageModel
+from aactextpredict.mixture import MixtureLanguageModel
+from aactextpredict.causal import CausalLanguageModel
+from aactextpredict.seq2seq import Seq2SeqLanguageModel
+from aactextpredict.causal_byte import CausalByteLanguageModel
+from aactextpredict.uniform import UniformLanguageModel
+from aactextpredict.classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
@@ -25,7 +25,7 @@ from sys import exit
 from scipy.stats import bootstrap
 from datetime import datetime
 from os import path
-from language_model import DEFAULT_SYMBOL_SET
+from aactextpredict.language_model import DEFAULT_SYMBOL_SET
 from socket import gethostname
 from torch import set_num_threads
 from psutil import cpu_count
