@@ -16,8 +16,8 @@ class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal model, GPT-2 by default."""
 
     def __init__(self,
+                 symbol_set: List[str],
                  lang_model_name: str,
-                 symbol_set: List[str] = DEFAULT_SYMBOL_SET,
                  lm_path: str = None,
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
