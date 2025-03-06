@@ -4,7 +4,7 @@ requires = ["setuptools>=61.0", "wheel>=0.37.1"]
 
 [project]
 name = "aactextpredict"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
     {name="Dylan Gaines", email="dcgaines@mtu.edu"},
     {name="Keith Vertanen", email="vertanen@mtu.edu"},
@@ -41,7 +41,7 @@ dependencies = [
     "evaluate==0.4.0",
     "scikit-learn==1.2.2",
     "accelerate==0.33.0",
-    "transformers==4.36.0",
+    "transformers==4.47.0",
     "numpy==1.24.4",
     "tqdm==4.62.2",
 ]
