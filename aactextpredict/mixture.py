@@ -110,10 +110,6 @@ class MixtureLanguageModel(LanguageModel):
 
         return next_char_pred
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
     def load(self) -> None:
         """
             Load the language models to be mixed
@@ -128,16 +124,3 @@ class MixtureLanguageModel(LanguageModel):
                 raise InvalidLanguageModelException(f"Error in creation of model type {lm_type}: {e.message}")
 
             self.models.append(lm)
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred

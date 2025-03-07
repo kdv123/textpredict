@@ -34,23 +34,8 @@ class UniformLanguageModel(LanguageModel):
         probs = equally_probable(self.symbol_set)
         return list(zip(self.symbol_set, probs))
 
-    def update(self) -> None:
-        """Update the model state"""
-
     def load(self) -> None:
         """Restore model state from the provided checkpoint"""
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text and outputs probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbols with probabilities
-        """
-        next_char_pred = self.predict(evidence)
-        return next_char_pred
 
 def equally_probable(alphabet: List[str],
                      specified: Optional[Dict[str, float]] = None) -> List[float]:

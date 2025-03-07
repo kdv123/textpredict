@@ -62,10 +62,6 @@ class NGramLanguageModel(LanguageModel):
 
         return next_char_pred
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
     def load(self) -> None:
         """
             Load the language model, initialize state variables
@@ -81,19 +77,6 @@ class NGramLanguageModel(LanguageModel):
 
         self.state = kenlm.State()
         self.state2 = kenlm.State()
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text and outputs probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbols with probabilities
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred
 
     def prob_dist(self, state: kenlm.State) -> List[Tuple]:
         """

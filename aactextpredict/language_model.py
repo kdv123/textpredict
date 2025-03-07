@@ -47,18 +47,6 @@ class LanguageModel(ABC):
         ...
 
     @abstractmethod
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    @abstractmethod
     def load(self) -> None:
-        """Restore model state from the provided checkpoint"""
+        """Load model from the provided assets/path"""
         ...
-
-    def reset(self) -> None:
-        """Reset language model state"""
-        ...
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """Update state by predicting and updating"""

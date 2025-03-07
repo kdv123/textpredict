@@ -398,10 +398,6 @@ class CausalLanguageModel(LanguageModel):
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
     def load(self) -> None:
         """
             Load the language model and tokenizer, initialize class variables
@@ -438,16 +434,4 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred
+    
