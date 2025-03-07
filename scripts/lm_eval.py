@@ -359,7 +359,7 @@ if __name__ == "__main__":
                 else:
                     correct_char = token.upper()
                 score = 0.0
-                next_char_pred = lm.state_update(list(context))
+                next_char_pred = lm.predict(list(context))
 
                 predict_time = timer() - start_predict
                 predict_time_arr = np.append(predict_time_arr, predict_time)
