@@ -1,6 +1,6 @@
-Python library for making text predictions using a language model.
+# Python library for making text predictions using a language model.
 
-**** Setting up a Python environment ****
+## Setting up a Python environment
 These instructions are the same as those in the classify-aac which actually does training of models.
 But the same environment should also work for evaluation using the models (though you may only need a subset of the packages).
 This was tested on cheetah on 9/14/24.
