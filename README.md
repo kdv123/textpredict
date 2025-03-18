@@ -8,6 +8,7 @@ This was tested on cheetah on 9/14/24.
 If you don't have anaconda installed in your user account you'll first need to do that.
 See: https://docs.anaconda.com/anaconda/install/linux/
 
+```
 % conda create -n aacllm python=3.10
 % conda activate aacllm
 % conda install pytorch torchvision torchaudio pytorch-cuda cuda mpi4py -c pytorch -c nvidia
@@ -15,3 +16,6 @@ See: https://docs.anaconda.com/anaconda/install/linux/
 % pip install --upgrade transformers
 % pip install kenlm==0.1 --global-option="--max_order=12"
 % pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate peft
+```
+
+This material is based upon work supported by the NSF under Grant No. IIS-1909089.
