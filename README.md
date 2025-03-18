@@ -3,10 +3,6 @@ This is a Python library for making text predictions using either a n-gram langu
 The library using KenLM for making inferences from n-gram language models and Hugging Face for inference from LLMs.
 
 ## Setting up a Python environment
-These instructions are the same as those in the classify-aac which actually does training of models.
-But the same environment should also work for evaluation using the models (though you may only need a subset of the packages).
-This was tested on cheetah on 9/14/24.
-
 If you don't have anaconda installed in your user account you'll first need to do that.
 See: https://docs.anaconda.com/anaconda/install/linux/
 
