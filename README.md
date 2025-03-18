@@ -1,5 +1,5 @@
 # Text Prediction Toolkit 
-This is a Python library for making text predictions using either a n-gram language model or a neural network based large language model (LLM).
+This is a Python library for making text predictions using either an n-gram language model or a large language model (LLM).
 The library using KenLM for making inferences from n-gram language models and Hugging Face for inference from LLMs.
 
 ## Setting up a Python environment
