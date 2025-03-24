@@ -12,7 +12,7 @@ authors = [
 ]
 description = "Text prediction toolkit for Augmentative and Alternative Communication."
 readme = "README.md"
-requires-python = ">=3.9,<=3.10"
+requires-python = ">=3.9,<3.11"
 classifiers = [
     'License :: Other/Proprietary License',
     'Topic :: Scientific/Engineering :: Human Machine Interfaces',
