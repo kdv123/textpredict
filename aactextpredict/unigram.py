@@ -1,8 +1,8 @@
 from typing import List, Tuple
 import json
-from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
-from exceptions import InvalidLanguageModelException
+from aactextpredict.language_model import LanguageModel
+from aactextpredict.language_model import BACKSPACE_CHAR, SPACE_CHAR
+from aactextpredict.exceptions import InvalidLanguageModelException
 
 
 class UnigramLanguageModel(LanguageModel):

@@ -2,9 +2,9 @@ from collections import Counter
 import torch
 from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
-from exceptions import InvalidLanguageModelException
+from aactextpredict.language_model import LanguageModel
+from aactextpredict.language_model import BACKSPACE_CHAR, SPACE_CHAR
+from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
 
