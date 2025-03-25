@@ -14,7 +14,7 @@ description = "Text prediction toolkit for Augmentative and Alternative Communic
 readme = "README.md"
 requires-python = ">=3.9,<3.11"
 classifiers = [
-    'License :: Other/Proprietary License',
+    'License :: MIT License',
     'Topic :: Scientific/Engineering :: Human Machine Interfaces',
     'Natural Language :: English',
     'Intended Audience :: Science/Research',
