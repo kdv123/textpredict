@@ -44,22 +44,7 @@ class UnigramLanguageModel(LanguageModel):
 
         return self.unigram_lm
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
     def load(self) -> None:
         """
             Load the language model and tokenizer, initialize class variables
         """
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character - evidence does not matter for unigram model
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        return self.unigram_lm

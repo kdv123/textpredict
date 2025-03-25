@@ -199,10 +199,6 @@ class CausalByteLanguageModel(LanguageModel):
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
     def load(self) -> None:
         """
             Load the language model and tokenizer, initialize class variables
@@ -233,19 +229,6 @@ class CausalByteLanguageModel(LanguageModel):
                 self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred
 
     def get_num_parameters(self) -> int:
         """
