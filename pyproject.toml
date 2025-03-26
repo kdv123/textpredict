@@ -43,7 +43,8 @@ dependencies = [
     "transformers==4.43.3",
     "numpy~=1.26.3",
     "tqdm==4.62.2",
-    "uniformers @ https://github.com/dcgaines/uniformers",
+    "uniformers @ git+https://github.com/dcgaines/uniformers.git",
+    "peft~=0.14.0"
 ]
 
 [project.license]
