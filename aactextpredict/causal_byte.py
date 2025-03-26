@@ -3,7 +3,7 @@ import torch
 from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.language_model import BACKSPACE_CHAR, SPACE_CHAR
+from aactextpredict.language_model import SPACE_CHAR
 from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -195,7 +195,6 @@ class CausalByteLanguageModel(LanguageModel):
                 next_char_pred[ch] = char_probs[i]
             else:
                 next_char_pred[ch.upper()] = char_probs[i]
-        next_char_pred[BACKSPACE_CHAR] = 0.0
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
@@ -223,8 +222,6 @@ class CausalByteLanguageModel(LanguageModel):
         for ch in self.symbol_set:
             if ch is SPACE_CHAR:
                 self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
             else:
                 self.symbol_set_lower.append(ch.lower())
 

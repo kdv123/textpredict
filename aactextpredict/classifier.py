@@ -3,7 +3,7 @@ import torch
 from typing import List, Tuple
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.language_model import BACKSPACE_CHAR, SPACE_CHAR
+from aactextpredict.language_model import SPACE_CHAR
 from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import softmax
 
@@ -181,8 +181,6 @@ class ClassifierLanguageModel(LanguageModel):
         next_char_pred[SPACE_CHAR] = next_char_pred[" "]
         del next_char_pred[" "]
 
-        next_char_pred[BACKSPACE_CHAR] = 0.0
-
         for low in self.symbol_set_lower:
             if low.isalpha():
                 next_char_pred[low.upper()] += next_char_pred[low]
@@ -214,8 +212,6 @@ class ClassifierLanguageModel(LanguageModel):
         for ch in self.symbol_set:
             if ch is SPACE_CHAR:
                 self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
             else:
                 self.symbol_set_lower.append(ch.lower())
 
