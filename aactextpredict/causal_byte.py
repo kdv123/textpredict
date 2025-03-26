@@ -3,7 +3,6 @@ import torch
 from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.language_model import SPACE_CHAR
 from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -93,11 +92,7 @@ class CausalByteLanguageModel(LanguageModel):
             self.index_to_word_lower[i] = word_lower
             # Create a mapping between the vocab index and the index in the result set
             try:
-                # Special case for space
-                if word == " ":
-                    self.result_to_vocab_indexes[self.symbol_set_lower.index(SPACE_CHAR)].append(i)
-                elif word != SPACE_CHAR:
-                    self.result_to_vocab_indexes[self.symbol_set_lower.index(word_lower)].append(i)
+                self.result_to_vocab_indexes[self.symbol_set_lower.index(word_lower)].append(i)
             except ValueError:
                 pass
 
@@ -134,7 +129,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
-        context = "".join(evidence).replace(SPACE_CHAR, ' ')
+        context = "".join(evidence)
 
         if self.case_simple and len(context) > 0:
             cased_context = ""
@@ -191,10 +186,7 @@ class CausalByteLanguageModel(LanguageModel):
         # Now construct the return dictionary that maps the character to its probability
         next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
+            next_char_pred[ch.upper()] = char_probs[i]
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
@@ -220,10 +212,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         self.symbol_set_lower = []
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            else:
-                self.symbol_set_lower.append(ch.lower())
+            self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
 

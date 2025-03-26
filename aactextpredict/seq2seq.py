@@ -1,7 +1,6 @@
 from typing import List, Tuple
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.language_model import SPACE_CHAR
 from aactextpredict.exceptions import InvalidLanguageModelException
 import torch
 from scipy.special import logsumexp
@@ -65,7 +64,7 @@ class Seq2SeqLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
-        context = "".join(evidence).replace(SPACE_CHAR, ' ').lower()
+        context = "".join(evidence).lower()
 
         input_ids = self.tokenizer(context).input_ids
 
@@ -108,11 +107,7 @@ class Seq2SeqLanguageModel(LanguageModel):
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
         for ch in self.symbol_set_lower:
-            # Convert space to the underscore used in BciPy
-            if ch == SPACE_CHAR:
-                target_ch = ' '
-            else:
-                target_ch = ch
+            target_ch = ch
 
             # Handle cases when symbols are never seen
             if target_ch in char_to_log_probs:
@@ -134,10 +129,7 @@ class Seq2SeqLanguageModel(LanguageModel):
 
         next_char_pred = Counter()
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
+            next_char_pred[ch.upper()] = char_probs[i]
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
@@ -161,12 +153,8 @@ class Seq2SeqLanguageModel(LanguageModel):
         self.symbol_set_lower = []
         self.symbol_set_lower_ascii = []
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-                self.symbol_set_lower_ascii.append(32)
-            else:
-                self.symbol_set_lower.append(ch.lower())
-                self.symbol_set_lower_ascii.append(ord(ch.lower()))
+            self.symbol_set_lower.append(ch.lower())
+            self.symbol_set_lower_ascii.append(ord(ch.lower()))
 
         # Get token id(s) for the left context we condition all sentences on
         if self.left_context and len(self.left_context) > 0:

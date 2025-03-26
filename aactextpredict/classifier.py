@@ -3,7 +3,6 @@ import torch
 from typing import List, Tuple
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.language_model import SPACE_CHAR
 from aactextpredict.exceptions import InvalidLanguageModelException
 from scipy.special import softmax
 
@@ -82,13 +81,7 @@ class ClassifierLanguageModel(LanguageModel):
             self.index_to_word_lower[i] = word_lower
             valid = True
             for ch in word_lower:
-                # The space char is only valid once we convert spaces to the space char
-                if ch == SPACE_CHAR:
-                    valid = False
-                    break
-                if ch == ' ':
-                    continue
-                elif ch not in self.symbol_set_lower:
+                if ch not in self.symbol_set_lower:
                     valid = False
                     break
             if valid:
@@ -97,7 +90,7 @@ class ClassifierLanguageModel(LanguageModel):
                 if length > self.longest_token:
                     self.longest_token = length
                 for j in range(length):
-                    key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
+                    key = word_lower[0:j + 1]
                     if key not in self.vocab:
                         self.vocab[key] = []
                     self.vocab[key] += i,
@@ -134,10 +127,7 @@ class ClassifierLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
-        converted_context = "".join(evidence)
-        converted_context_lower = converted_context.lower()
-
-        context = converted_context.replace(SPACE_CHAR, ' ')
+        context = "".join(evidence)
 
         if self.case_simple and len(context) > 0:
             cased_context = ""
@@ -159,8 +149,6 @@ class ClassifierLanguageModel(LanguageModel):
         else:
             context = context.lower()
 
-        context_lower = context.lower()
-
         tokens = []
         tokens.extend(self.left_context_tokens)
 
@@ -177,9 +165,6 @@ class ClassifierLanguageModel(LanguageModel):
 
         keys = [*"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' "]
         next_char_pred = Counter(dict(zip(keys, char_probs)))
-            
-        next_char_pred[SPACE_CHAR] = next_char_pred[" "]
-        del next_char_pred[" "]
 
         for low in self.symbol_set_lower:
             if low.isalpha():
@@ -210,10 +195,7 @@ class ClassifierLanguageModel(LanguageModel):
 
         self.symbol_set_lower = []
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            else:
-                self.symbol_set_lower.append(ch.lower())
+            self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
 
