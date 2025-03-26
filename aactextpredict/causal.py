@@ -11,7 +11,7 @@ from scipy.special import softmax
 import time
 from collections import defaultdict
 from typing import Final
-from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
+from peft import AutoPeftModelForCausalLM
 
 class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal model, GPT-2 by default."""
@@ -432,19 +432,7 @@ class CausalLanguageModel(LanguageModel):
                 self.model = self.model.half()
         except:
             raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
-
-#        if self.lora:
-#            try:
-#                config = PeftConfig.from_pretrained(self.lora_path)
-#                peft_model = PeftModel.from_pretrained(self.model, config)
-#                peft_model.set_adapter("lora")
-#                self.model = peft_model
-                #                self.model = peft_model.merge_and_unload()
-#                self.model.load_adapter(self.lora_path)
-#                self.model.enable_adapters()
-#            except:
-#                raise InvalidLanguageModelException(f"Failed to load LoRA adapter. Ensure {self.lora_path} is a valid LoRA adapter.")
-        
+  
         self.model.eval()
 
         self.model.to(self.device)
