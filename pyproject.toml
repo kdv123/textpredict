@@ -41,7 +41,7 @@ dependencies = [
     "scikit-learn==1.2.2",
     "accelerate==0.33.0",
     "transformers==4.43.3",
-    "numpy==1.24.4",
+    "numpy~=1.26.3",
     "tqdm==4.62.2",
     "uniformers @ https://github.com/dcgaines/uniformers",
 ]
