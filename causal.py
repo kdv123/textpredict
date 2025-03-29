@@ -386,7 +386,7 @@ class CausalLanguageModel(LanguageModel):
 
                 if self.best_token_limit:
                     # New way based on the argsort of the top tokens
-                    best_count = 0
+                    #best_count = 0
                     for token_id in sorted_args[current_index]:
                         if token_id in vocab_set or token_id in extra_vocab_set:
                             # For a hypothesis to finish it must extend beyond the existing typed context
@@ -396,6 +396,9 @@ class CausalLanguageModel(LanguageModel):
                                 # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                                 char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                                 completed += 1
+                                if self.max_completed and completed >= self.max_completed:
+                                    done = True
+                                    break
                             elif not self.beam_width or len(next_hypos) < self.beam_width:
                                 # If we are under the beam limit then just add it
                                 heapq.heappush(next_hypos,
@@ -408,9 +411,9 @@ class CausalLanguageModel(LanguageModel):
                                                   (new_log_probs[current_index][token_id],
                                                    current[SEQ] + [token_id],
                                                    current[LEN] + subword_len))
-                            best_count += 1
-                            if best_count >= self.best_token_limit:
-                                break
+                            #best_count += 1
+                            #if best_count >= self.best_token_limit:
+                            #    break
                 else:
                     # Classic way that goes through all matching tokens
                     for token_id in itertools.chain(vocab, extra_vocab):
