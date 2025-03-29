@@ -72,8 +72,7 @@ class CausalLanguageModel(LanguageModel):
         self.vocab_set = defaultdict(set)
 
         # Limit calculations to only top N subword tokens
-        self.best_token_limit = 32
-        #self.best_token_limit = None
+        #self.best_token_limit = 32
 
         if lora and not lora_path:
             print(f"ERROR: Must specify path to LoRA adapter")
@@ -321,15 +320,12 @@ class CausalLanguageModel(LanguageModel):
                 sorted_args = torch.argsort(new_log_probs, descending=True).detach().cpu().numpy()
                 new_log_probs = new_log_probs.detach().cpu().numpy()
 
-            #for j in range(len(current_hypos)):
-            #    print(f"top = {sorted_args[j]} {self.index_to_word_lower[sorted_args[j][0]]}")
-
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             # Loop over all the hypotheses from the batch
             for current_index, current in enumerate(current_hypos):
-                vocab = []
-                extra_vocab = []
+                #vocab = []
+                #extra_vocab = []
 
                 vocab_set = set()
                 extra_vocab_set = set()
@@ -339,13 +335,13 @@ class CausalLanguageModel(LanguageModel):
                 if len(remaining_context) == 0:
                     # There is no remaining context thus all subword tokens that are valid under our symbol set
                     # should be considered when computing the probability of the next character.
-                    vocab = self.valid_vocab
+                    #vocab = self.valid_vocab
                     vocab_set = self.valid_vocab_set
                 else:
                     if remaining_context in self.vocab:
                         # We have a list of subword tokens that match the remaining text.
                         # They could be the same length as the remaining text or longer and have the remaining text as a prefix.
-                        vocab = self.vocab[remaining_context]
+                        #vocab = self.vocab[remaining_context]
                         vocab_set = self.vocab_set[remaining_context]
 
                     # We may need to use a subword token that doesn't completely consume the remaining text.
@@ -354,7 +350,7 @@ class CausalLanguageModel(LanguageModel):
                         tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
                         # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
                         if len(tokenization) == 1:
-                            extra_vocab += tokenization[0],
+                            #extra_vocab += tokenization[0],
                             extra_vocab_set.add(tokenization[0])
 
                 # The below code takes the most time, results from pprofile on 5 phrases on an 2080 GPU:
@@ -384,39 +380,11 @@ class CausalLanguageModel(LanguageModel):
                 #print(f"SIZE vocab {len(vocab)} extra_vocab {len(extra_vocab)}")
                 #print(f"SIZE vocab_set {len(vocab_set)} extra_vocab_set {len(extra_vocab_set)}")
 
-                if self.best_token_limit:
-                    # New way based on the argsort of the top tokens
-                    #best_count = 0
-                    for token_id in sorted_args[current_index]:
-                        if token_id in vocab_set or token_id in extra_vocab_set:
-                            # For a hypothesis to finish it must extend beyond the existing typed context
-                            subword_len = len(self.index_to_word_lower[token_id])
-                            if (current[LEN] + subword_len) > len(context):
-                                # Add this likelihood to the list for the character at the prediction position.
-                                # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-                                char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                                completed += 1
-                                if self.max_completed and completed >= self.max_completed:
-                                    done = True
-                                    break
-                            elif not self.beam_width or len(next_hypos) < self.beam_width:
-                                # If we are under the beam limit then just add it
-                                heapq.heappush(next_hypos,
-                                               (new_log_probs[current_index][token_id],
-                                                current[SEQ] + [token_id],
-                                                current[LEN] + subword_len))
-                            elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
-                                # Or replace the worst hypotheses with the new one
-                                heapq.heappushpop(next_hypos,
-                                                  (new_log_probs[current_index][token_id],
-                                                   current[SEQ] + [token_id],
-                                                   current[LEN] + subword_len))
-                            #best_count += 1
-                            #if best_count >= self.best_token_limit:
-                            #    break
-                else:
-                    # Classic way that goes through all matching tokens
-                    for token_id in itertools.chain(vocab, extra_vocab):
+#                if self.best_token_limit:
+                # New way based on the argsort of the top tokens
+                #best_count = 0
+                for token_id in sorted_args[current_index]:
+                    if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
                         subword_len = len(self.index_to_word_lower[token_id])
                         if (current[LEN] + subword_len) > len(context):
@@ -424,6 +392,8 @@ class CausalLanguageModel(LanguageModel):
                             # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                             char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                             completed += 1
+                            if self.max_completed and completed >= self.max_completed:
+                                break
                         elif not self.beam_width or len(next_hypos) < self.beam_width:
                             # If we are under the beam limit then just add it
                             heapq.heappush(next_hypos,
@@ -436,6 +406,28 @@ class CausalLanguageModel(LanguageModel):
                                               (new_log_probs[current_index][token_id],
                                                current[SEQ] + [token_id],
                                                current[LEN] + subword_len))
+#                else:
+#                    # Classic way that goes through all matching tokens
+#                    for token_id in itertools.chain(vocab, extra_vocab):
+#                        # For a hypothesis to finish it must extend beyond the existing typed context
+#                        subword_len = len(self.index_to_word_lower[token_id])
+#                        if (current[LEN] + subword_len) > len(context):
+#                            # Add this likelihood to the list for the character at the prediction position.
+#                            # Tracking the list and doing logsumpexp later was faster than doing it for each add.
+#                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+#                            completed += 1
+#                        elif not self.beam_width or len(next_hypos) < self.beam_width:
+#                            # If we are under the beam limit then just add it
+#                            heapq.heappush(next_hypos,
+#                                           (new_log_probs[current_index][token_id],
+#                                            current[SEQ] + [token_id],
+#                                            current[LEN] + subword_len))
+#                        elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
+#                            # Or replace the worst hypotheses with the new one
+#                            heapq.heappushpop(next_hypos,
+#                                              (new_log_probs[current_index][token_id],
+#                                               current[SEQ] + [token_id],
+#                                               current[LEN] + subword_len))
 
                 # Break out of the for loop over hypotheses and while loop if we reach our max completed goal
                 if self.max_completed and completed >= self.max_completed:
