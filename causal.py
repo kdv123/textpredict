@@ -72,7 +72,7 @@ class CausalLanguageModel(LanguageModel):
         self.vocab_set = defaultdict(set)
 
         # Limit calculations to only top N subword tokens
-        self.best_token_limit = 128
+        self.best_token_limit = 32
         #self.best_token_limit = None
 
         if lora and not lora_path:
