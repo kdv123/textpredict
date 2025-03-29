@@ -293,21 +293,28 @@ class CausalLanguageModel(LanguageModel):
             # Create the torch tensor for the inference with a row for each hypothesis.
             tokens_tensor = torch.tensor([x[SEQ] for x in current_hypos]).reshape(len(current_hypos), -1).to(self.device)
 
+            #print(f"DEBUG tokens_tensor = {tokens_tensor.shape}")
+
             before_inference_ns = time.time_ns()
             # Ask the LLM to predict tokens that come after our current set of hypotheses
             with torch.no_grad():
                 # Compute the probabilities from the logits
                 log_probs = torch.log_softmax(self.model(tokens_tensor).logits[:, -1, :], dim=1)
+                #print(f"DEBUG log_probs = {log_probs.shape}")
 
                 # Create a big 2D tensor where each row is that hypothesis' current likelihood.
                 # First create a list of just the hypotheses' likelihoods.
                 # Then reshape to be a column vector.
                 # Then duplicate the column based on the number of subword tokens in the LLM.
-                add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
+                #add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
+                add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape(-1, 1).to(self.device)
+                #print(f"DEBUG add_tensor = {add_tensor.shape}")
 
                 # Add the current likelihoods with each subtoken's probability.
                 # Move it back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
                 new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
+                #print(f"DEBUG new_log_probs = {new_log_probs.shape}")
+
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
             for current_index, current in enumerate(current_hypos):
