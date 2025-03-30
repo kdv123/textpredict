@@ -383,7 +383,7 @@ class CausalLanguageModel(LanguageModel):
 #                if self.best_token_limit:
                 # New way based on the argsort of the top tokens
                 #best_count = 0
-                for token_id in sorted_args[current_index][0:1000]:
+                for token_id in sorted_args[current_index][0:4000]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
                         subword_len = len(self.index_to_word_lower[token_id])
@@ -392,6 +392,8 @@ class CausalLanguageModel(LanguageModel):
                             # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                             char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                             completed += 1
+                            #print(f"char_to_log_probs = {len(char_to_log_probs)}")
+
                             if self.max_completed and completed >= self.max_completed:
                                 break
                         elif not self.beam_width or len(next_hypos) < self.beam_width:
