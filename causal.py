@@ -391,9 +391,8 @@ class CausalLanguageModel(LanguageModel):
                             # Add this likelihood to the list for the character at the prediction position.
                             # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                             char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                            #completed += 1
-                            #if (self.max_completed and completed >= self.max_completed) or (len(char_to_log_probs) >= len(self.symbol_set)):
-                            if len(char_to_log_probs) >= len(self.symbol_set):
+                            completed += 1
+                            if self.max_completed and completed >= self.max_completed:
                                 done = True
                                 break
                         elif not self.beam_width or len(next_hypos) < self.beam_width:
