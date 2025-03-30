@@ -69,6 +69,8 @@ if __name__ == "__main__":
                         help="search beam width for causal LM, recommended value = 8")
     parser.add_argument("--max-completed", type=int,
                         help="stop causal LM search after this many completed hypotheses, recommended value = 32000")
+    parser.add_argument("--best-token-limit", type=int, default=1000000000,
+                        help="limit search to this number of best tokens")
     parser.add_argument("--ppl-file",
                         help="output sentence and ppl to a file")
     parser.add_argument("--symbol-file",
@@ -101,7 +103,6 @@ if __name__ == "__main__":
                         help="drop <s> and </s> words from phrases")
     parser.add_argument("--skip-oov-symbols", action="store_true",
                         help="skip symbols that aren't in our symbol set")
-
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -233,7 +234,8 @@ if __name__ == "__main__":
                                  case_simple=args.case_simple,
                                  max_completed=args.max_completed,
                                  lora=args.lora,
-                                 lora_path=args.lora_path)
+                                 lora_path=args.lora_path,
+                                 best_token_limit=args.best_token_limit,)
     elif model == 5:
         lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
                                   lang_model_name=args.model_name,
@@ -253,6 +255,7 @@ if __name__ == "__main__":
                                              "mixed_case_context": args.mixed_case_context,
                                              "case_simple": args.case_simple,
                                              "max_completed": args.max_completed,
+                                             "best_token_limit": args.best_token_limit,
                                             },
                                             {"lm_path": args.ngram_lm}])
     elif model == 7:

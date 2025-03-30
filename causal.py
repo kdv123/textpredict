@@ -30,6 +30,7 @@ class CausalLanguageModel(LanguageModel):
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
+                 best_token_limit: int = 1000000000,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -46,6 +47,7 @@ class CausalLanguageModel(LanguageModel):
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
             lora               - use LoRA adapter
             lora_path          - load LoRA adapter from Hugging Face or local directory
+            best_token_limit   - limit exploration to best so many tokens in each hypothesis
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -65,6 +67,7 @@ class CausalLanguageModel(LanguageModel):
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
+        self.best_token_limit = best_token_limit
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -81,7 +84,7 @@ class CausalLanguageModel(LanguageModel):
         if not max_completed and not beam_width:
             print(f"WARNING: using causal language model without any pruning, this can be slow!")
         else:
-            print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}")
+            print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}, best_token_limit {best_token_limit}")
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -315,14 +318,12 @@ class CausalLanguageModel(LanguageModel):
                 add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape(-1, 1).to(self.device)
 
                 # Add the current likelihoods with each subtoken's probability.
-                # Move it back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
-                #new_log_probs = torch.add(log_probs, add_tensor)
-                #sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach().cpu().numpy()
-                #new_log_probs = new_log_probs.detach().cpu().numpy()
+                new_log_probs = torch.add(log_probs, add_tensor)
 
-                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
-                sorted_args = np.argsort(-new_log_probs, axis=1)
-            #print(f"{sorted_args[0]} {sorted_args2[0]}")
+                # Use the GPU to sort the tokens by probability, this allows use to do better max completed pruning in the search.
+                # Move both back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
+                sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach().cpu().numpy()
+                new_log_probs = new_log_probs.detach().cpu().numpy()
 
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
@@ -379,15 +380,9 @@ class CausalLanguageModel(LanguageModel):
                 #  - Sort the rows in the log prob results on the GPU. Use these to limit which token IDs we explore in the below
                 #    for loop. Is it possible to do this without introducing too much extra work to limit to the high probability ones?
 
-                # Create a list of token indexes that are a prefix of the target text.
-                # We go over all the integer IDs in the vocab and extra_vocab lists.
-                #print(f"SIZE vocab {len(vocab)} extra_vocab {len(extra_vocab)}")
-                #print(f"SIZE vocab_set {len(vocab_set)} extra_vocab_set {len(extra_vocab_set)}")
-
-#                if self.best_token_limit:
-                # New way based on the argsort of the top tokens
-                #best_count = 0
-                for token_id in sorted_args[current_index]:
+                # Explore the token predictions in order from most to least probable.
+                # We may optionally limit to exploring only the top-N tokens for a hypothesis.
+                for token_id in sorted_args[current_index][:self.best_token_limit]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
                         subword_len = len(self.index_to_word_lower[token_id])
@@ -412,6 +407,8 @@ class CausalLanguageModel(LanguageModel):
                                                current[SEQ] + [token_id],
                                                current[LEN] + subword_len))
 #                else:
+#                    # Create a list of token indexes that are a prefix of the target text.
+#                    # We go over all the integer IDs in the vocab and extra_vocab lists.
 #                    # Classic way that goes through all matching tokens
 #                    for token_id in itertools.chain(vocab, extra_vocab):
 #                        # For a hypothesis to finish it must extend beyond the existing typed context
