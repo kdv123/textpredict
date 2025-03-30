@@ -449,7 +449,7 @@ class CausalLanguageModel(LanguageModel):
                 target_ch = ch
 
             # Handle cases when symbols are never seen
-            if target_ch in char_to_log_probs and len(char_to_log_probs[target_ch]) > 0:
+            if target_ch in char_to_log_probs:
                 char_probs += logsumexp(char_to_log_probs[target_ch]),
             else:
                 char_probs += float("-inf"),
