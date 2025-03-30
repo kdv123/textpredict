@@ -316,9 +316,13 @@ class CausalLanguageModel(LanguageModel):
 
                 # Add the current likelihoods with each subtoken's probability.
                 # Move it back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
-                new_log_probs = torch.add(log_probs, add_tensor)
-                sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach().cpu().numpy()
-                new_log_probs = new_log_probs.detach().cpu().numpy()
+                #new_log_probs = torch.add(log_probs, add_tensor)
+                #sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach().cpu().numpy()
+                #new_log_probs = new_log_probs.detach().cpu().numpy()
+
+                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
+                sorted_args = np.argsort(-new_log_probs, axis=1)
+            #print(f"{sorted_args[0]} {sorted_args2[0]}")
 
             self.predict_inference_ns += time.time_ns() - before_inference_ns
 
