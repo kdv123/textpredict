@@ -383,7 +383,7 @@ class CausalLanguageModel(LanguageModel):
 #                if self.best_token_limit:
                 # New way based on the argsort of the top tokens
                 #best_count = 0
-                for token_id in sorted_args[current_index][0:100]:
+                for token_id in sorted_args[current_index][0:1000]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
                         subword_len = len(self.index_to_word_lower[token_id])
