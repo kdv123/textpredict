@@ -30,7 +30,6 @@ class CausalLanguageModel(LanguageModel):
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
-                 best_token_limit: int = 1000000000,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -47,7 +46,6 @@ class CausalLanguageModel(LanguageModel):
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
             lora               - use LoRA adapter
             lora_path          - load LoRA adapter from Hugging Face or local directory
-            best_token_limit   - limit exploration to best so many tokens in each hypothesis
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -67,15 +65,11 @@ class CausalLanguageModel(LanguageModel):
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
-        self.best_token_limit = best_token_limit
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
         self.valid_vocab_set = None
         self.vocab_set = defaultdict(set)
-
-        # Limit calculations to only top N subword tokens
-        #self.best_token_limit = 32
 
         if lora and not lora_path:
             print(f"ERROR: Must specify path to LoRA adapter")
@@ -84,7 +78,7 @@ class CausalLanguageModel(LanguageModel):
         if not max_completed and not beam_width:
             print(f"WARNING: using causal language model without any pruning, this can be slow!")
         else:
-            print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}, best_token_limit {best_token_limit}")
+            print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}")
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -260,9 +254,6 @@ class CausalLanguageModel(LanguageModel):
             else:
                 truncated_context = context_lower[0:pos]
             tokens.extend(self._encode(truncated_context))
-            #prefix_len -= pos
-
-        #print(f"DEBUG, {context_lower} pos {pos}, prefix_len {prefix_len}")
 
         # Constant indexes for use with the hypotheses tuples
         LOGP: Final[int] = 0
@@ -329,9 +320,6 @@ class CausalLanguageModel(LanguageModel):
 
             # Loop over all the hypotheses from the batch
             for current_index, current in enumerate(current_hypos):
-                #vocab = []
-                #extra_vocab = []
-
                 vocab_set = set()
                 extra_vocab_set = set()
 
@@ -358,32 +346,19 @@ class CausalLanguageModel(LanguageModel):
                             #extra_vocab += tokenization[0],
                             extra_vocab_set.add(tokenization[0])
 
-                # The below code takes the most time, results from pprofile on 5 phrases on an 2080 GPU:
-                #    299|  22484582|      89.5763|   3.9839e-06| 14.24%|                for token_id in itertools.chain(vocab, extra_vocab):
-                #    300|         0|            0|            0|  0.00%|                    # For a hypothesis to finish it must extend beyond the existing typed context
-                #    301|  22483271|      93.7939|  4.17172e-06| 14.91%|                    subword_len = len(self.index_to_word_lower[token_id])
-                #    302|  22483271|      92.8608|  4.13022e-06| 14.76%|                    if (current[LEN] + subword_len) > len(context):
-                #    303|         0|            0|            0|  0.00%|                        # Add this likelihood to the list for the character at the prediction position.
-                #    304|         0|            0|            0|  0.00%|                        # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-                #    305|  22480431|      106.353|  4.73094e-06| 16.90%|                        char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-                #    306|  22480431|       92.689|   4.1231e-06| 14.73%|                        completed += 1
-                #    307|      2840|    0.0124488|  4.38338e-06|  0.00%|                    elif not self.beam_width or len(next_hypos) <
+                # The below for-loop takes the most time (other than the GPU inference and sort).
                 #
                 # Tuning notes:
                 #  - With a beam of 8 and max completed of 32,000, getting around 5x speedup on written dev set.
                 #  - This results in a PPL increase of 0.0025 versus old results using only beam of >= 8.
                 #  - Pruning based on log probability difference and based on minimum number of hypotheses per symbol in alphabet did worse.
                 #  - Code for these other pruning methods was removed.
+                #  - Pruning to  top sorted tokens didn't speed it compared to max completed.
+                #  - Currently 65% of time spent in GPU code block.
                 # Possible ways to make it faster:
-                #  - Stop part way through the below for loop over (vocab, extra_vocab). But this seems weird since the token IDs are in
-                #    no particular order, we'd be just stopping early on the last hypothesis being explored by the enclosing loop.
-                #  - Sort the rows in the log prob results on the GPU. Use these to limit which token IDs we explore in the below
-                #    for loop. Is it possible to do this without introducing too much extra work to limit to the high probability ones?
+                #  - Search in parallel, Python 3.13 and threads without GIL?
 
                 # Explore the token predictions in order from most to least probable.
-                # We may optionally limit to exploring only the top-N tokens for a hypothesis.
-                completed_this_hypothesis = 0
-                #for token_id in sorted_args[current_index][:self.best_token_limit]:
                 for token_id in sorted_args[current_index]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
@@ -393,9 +368,9 @@ class CausalLanguageModel(LanguageModel):
                             # Tracking the list and doing logsumpexp later was faster than doing it for each add.
                             char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                             completed += 1
-                            completed_this_hypothesis += 1
                             # Exit this hypothesis if we reach global limit or limit for a single hypothesis.
-                            if (self.max_completed and completed >= self.max_completed) or completed_this_hypothesis > self.best_token_limit:
+                            if self.max_completed and completed >= self.max_completed:
+                                done = True
                                 break
                         elif not self.beam_width or len(next_hypos) < self.beam_width:
                             # If we are under the beam limit then just add it
@@ -409,31 +384,6 @@ class CausalLanguageModel(LanguageModel):
                                               (new_log_probs[current_index][token_id],
                                                current[SEQ] + [token_id],
                                                current[LEN] + subword_len))
-#                else:
-#                    # Create a list of token indexes that are a prefix of the target text.
-#                    # We go over all the integer IDs in the vocab and extra_vocab lists.
-#                    # Classic way that goes through all matching tokens
-#                    for token_id in itertools.chain(vocab, extra_vocab):
-#                        # For a hypothesis to finish it must extend beyond the existing typed context
-#                        subword_len = len(self.index_to_word_lower[token_id])
-#                        if (current[LEN] + subword_len) > len(context):
-#                            # Add this likelihood to the list for the character at the prediction position.
-#                            # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-#                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
-#                            completed += 1
-#                        elif not self.beam_width or len(next_hypos) < self.beam_width:
-#                            # If we are under the beam limit then just add it
-#                            heapq.heappush(next_hypos,
-#                                           (new_log_probs[current_index][token_id],
-#                                            current[SEQ] + [token_id],
-#                                            current[LEN] + subword_len))
-#                        elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
-#                            # Or replace the worst hypotheses with the new one
-#                            heapq.heappushpop(next_hypos,
-#                                              (new_log_probs[current_index][token_id],
-#                                               current[SEQ] + [token_id],
-#                                               current[LEN] + subword_len))
-
                 # Break out of the for loop over hypotheses and while loop if we reach our max completed goal
                 if self.max_completed and completed >= self.max_completed:
                     done = True
