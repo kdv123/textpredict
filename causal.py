@@ -159,7 +159,7 @@ class CausalLanguageModel(LanguageModel):
             if self.left_context == "":
                 if "gpt2" in self.model_name:
                     self.left_context = "<|endoftext|>"
-                elif "Llama-3.1" in self.model_name:
+                elif "Llama" in self.model_name:
                     self.left_context = "<|begin_of_text|>"
                 # Seems to have both sentence start and end tokens: https://docs.mistral.ai/guides/tokenization/
                 elif "Mistral" in self.model_name:
@@ -170,7 +170,7 @@ class CausalLanguageModel(LanguageModel):
         # OPT, Llama and Mistral all insert start token
         self.drop_first_token = (self.model_name.startswith("facebook/opt") or
                                  self.model_name.startswith("figmtu/opt") or
-                                 "Llama-3.1" in self.model_name or
+                                 "Llama" in self.model_name or
                                  "Mistral" in self.model_name)
 
         # Get token id(s) for the left context we condition all sentences on
