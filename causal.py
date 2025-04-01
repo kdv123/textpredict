@@ -153,8 +153,8 @@ class CausalLanguageModel(LanguageModel):
         if "deepseek" in self.model_name.lower():
             if self.left_context and len(self.left_context) > 0:
                 # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
-                self.left_context = ""
                 print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
+            self.left_context = ""
         else:
             # Get the index we use for the start or end pseudo-word
             if self.left_context == "":
@@ -172,6 +172,8 @@ class CausalLanguageModel(LanguageModel):
                                      self.model_name.startswith("figmtu/opt") or
                                      "Llama" in self.model_name or
                                      "Mistral" in self.model_name)
+
+        print(f"Causal, left context = '{self.left_context}', drop_first_token = {self.drop_first_token}")
 
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
