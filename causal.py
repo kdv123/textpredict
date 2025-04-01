@@ -155,6 +155,7 @@ class CausalLanguageModel(LanguageModel):
                 # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
                 print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
             self.left_context = ""
+            self.drop_first_token = True
         else:
             # Get the index we use for the start or end pseudo-word
             if self.left_context == "":
