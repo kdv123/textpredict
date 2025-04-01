@@ -149,10 +149,11 @@ class CausalLanguageModel(LanguageModel):
         # self.index_to_word[self.vocab["cyclo"][0]] = cyclop
         # self.index_to_word[self.vocab["cyclo"][1]] = cyclopedia
 
-        if "deepseek" in self.model_name.lower() and self.left_context and len(self.left_context) > 0:
-            # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
-            self.left_context = ""
-            print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
+        if "deepseek" in self.model_name.lower():
+            if self.left_context and len(self.left_context) > 0:
+                # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
+                self.left_context = ""
+                print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
         else:
             # Get the index we use for the start or end pseudo-word
             if self.left_context == "":
