@@ -148,6 +148,7 @@ class CausalLanguageModel(LanguageModel):
         # self.vocab["cyclo"] = [47495, 49484]
         # self.index_to_word[self.vocab["cyclo"][0]] = cyclop
         # self.index_to_word[self.vocab["cyclo"][1]] = cyclopedia
+        self.drop_first_token = False
 
         if "deepseek" in self.model_name.lower():
             if self.left_context and len(self.left_context) > 0:
@@ -166,12 +167,11 @@ class CausalLanguageModel(LanguageModel):
                     self.left_context = "<s>"
                 else:
                     self.left_context = "</s>"
-
-        # OPT, Llama and Mistral all insert start token
-        self.drop_first_token = (self.model_name.startswith("facebook/opt") or
-                                 self.model_name.startswith("figmtu/opt") or
-                                 "Llama" in self.model_name or
-                                 "Mistral" in self.model_name)
+            # OPT, Llama and Mistral all insert start token
+            self.drop_first_token = (self.model_name.startswith("facebook/opt") or
+                                     self.model_name.startswith("figmtu/opt") or
+                                     "Llama" in self.model_name or
+                                     "Mistral" in self.model_name)
 
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
