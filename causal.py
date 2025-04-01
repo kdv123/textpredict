@@ -173,11 +173,9 @@ class CausalLanguageModel(LanguageModel):
                                      "Llama" in self.model_name or
                                      "Mistral" in self.model_name)
 
-        print(f"Causal, left context = '{self.left_context}', drop_first_token = {self.drop_first_token}")
-
         # Get token id(s) for the left context we condition all sentences on
         self.left_context_tokens = self._encode(self.left_context)
-        print(f"Causal: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}")
+        print(f"Causal: left_context = '{self.left_context}', left_context_tokens = {self.left_context_tokens}, drop_first_token = {self.drop_first_token}")
 
     def _encode(self, text: str) -> List[int]:
         tokens = self.tokenizer.encode(text)
