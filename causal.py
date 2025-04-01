@@ -149,17 +149,22 @@ class CausalLanguageModel(LanguageModel):
         # self.index_to_word[self.vocab["cyclo"][0]] = cyclop
         # self.index_to_word[self.vocab["cyclo"][1]] = cyclopedia
 
-        # Get the index we use for the start or end pseudo-word
-        if self.left_context == "":
-            if "gpt2" in self.model_name:
-                self.left_context = "<|endoftext|>"
-            elif "Llama-3.1" in self.model_name:
-                self.left_context = "<|begin_of_text|>"
-            # Seems to have both sentence start and end tokens: https://docs.mistral.ai/guides/tokenization/
-            elif "Mistral" in self.model_name:
-                self.left_context = "<s>"
-            else:
-                self.left_context = "</s>"
+        if "deepseek" in self.model_name.lower() and self.left_context and len(self.left_context) > 0:
+            # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
+            self.left_context = ""
+            print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
+        else:
+            # Get the index we use for the start or end pseudo-word
+            if self.left_context == "":
+                if "gpt2" in self.model_name:
+                    self.left_context = "<|endoftext|>"
+                elif "Llama-3.1" in self.model_name:
+                    self.left_context = "<|begin_of_text|>"
+                # Seems to have both sentence start and end tokens: https://docs.mistral.ai/guides/tokenization/
+                elif "Mistral" in self.model_name:
+                    self.left_context = "<s>"
+                else:
+                    self.left_context = "</s>"
 
         # OPT, Llama and Mistral all insert start token
         self.drop_first_token = (self.model_name.startswith("facebook/opt") or
