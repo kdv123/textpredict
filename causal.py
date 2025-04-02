@@ -364,6 +364,7 @@ class CausalLanguageModel(LanguageModel):
                 #  - Currently 65% of time spent in GPU code block.
                 # Possible ways to make it faster:
                 #  - Search in parallel, Python 3.13 and threads without GIL?
+                #  - Do matrix multiply with mask matrix to zero out invalid token IDs
 
                 # Explore the token predictions in order from most to least probable.
                 for token_id in sorted_args[current_index]:
