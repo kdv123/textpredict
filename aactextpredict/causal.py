@@ -169,8 +169,11 @@ class CausalLanguageModel(LanguageModel):
     def _encode(self, text: str) -> List[int]:
         tokens = self.tokenizer.encode(text)
         # Both OPT and Llama automatically insert a start token which we want to control ourselves
-        if len(tokens) > 1 and self.drop_first_token:
-            tokens = tokens[1:]
+        if self.drop_first_token:
+            if len(text) == 0:
+                return []
+            else:
+                tokens = tokens[1:]
 
         return tokens
 
