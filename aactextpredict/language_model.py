@@ -1,11 +1,11 @@
 """Defines the language model base class."""
 from abc import ABC, abstractmethod
 from typing import List, Tuple
-from string import ascii_uppercase
+from string import ascii_uppercase, ascii_lowercase
 
 # Returns all uppercase English letters
-def alphabet():
-    """Alphabet.
+def alphabet_upper():
+    """Alphabet Upper
 
     Function used to standardize the symbols we use as alphabet.
 
@@ -15,7 +15,31 @@ def alphabet():
     """
     return list(ascii_uppercase)
 
-DEFAULT_SYMBOL_SET = alphabet() + [' ']
+# Returns all lowercase English letters
+def alphabet_lower():
+    """Alphabet Lower
+    
+    Function used to standardize the symbols we use as alphabet
+    
+    Returns
+    -------
+        array of letters.
+    """
+    return list(ascii_lowercase)
+
+# Returns all English letters in mixed case
+def alphabet_mixed():
+    """Alphabet Mixed
+    
+    Function used to standardize the symbols we use as alphabet
+    
+    Returns
+    -------
+        array of letters.
+    """
+    return alphabet_lower() + alphabet_upper()
+
+DEFAULT_SYMBOL_SET = alphabet_upper() + [' ']
 
 class LanguageModel(ABC):
     """Parent class for Language Models."""
