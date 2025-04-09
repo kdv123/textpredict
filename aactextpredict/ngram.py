@@ -9,16 +9,24 @@ import numpy as np
 class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
 
+    space_symbol = None
+
     def __init__(self,
                  symbol_set: List[str],
                  lm_path: str,
-                 skip_symbol_norm: Optional[bool] = False):
+                 skip_symbol_norm: Optional[bool] = False,
+                 start_symbol: str = "<s>",
+                 end_symbol: str = "</s>",
+                 space_symbol: str = "<sp>"):
 
         super().__init__(symbol_set=symbol_set)
         print(f"Creating n-gram language model, lm_path = {lm_path}")
         self.model = None
         self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm
+        self.start_symbol = start_symbol
+        self.end_symbol = end_symbol
+        self.space_symbol = space_symbol
         self.load()
 
     def predict_character(self, evidence: List[str]) -> List[Tuple]:
@@ -37,11 +45,9 @@ class NGramLanguageModel(LanguageModel):
         if len(context) > 11:
             context = context[-11:]
 
-        evidence_str = ''.join(context).lower()
-
         for i, ch in enumerate(context):
             if ch == ' ':
-                context[i] = "<sp>"
+                context[i] = self.space_symbol
 
         self.model.BeginSentenceWrite(self.state)
 
@@ -91,7 +97,7 @@ class NGramLanguageModel(LanguageModel):
             self.model = kenlm.LanguageModel(self.lm_path)
         except BaseException:
             raise InvalidLanguageModelException(
-                f"A valid model path must be provided for the KenLMLanguageModel.\nPath{self.lm_path} is not valid.")
+                f"A valid model path must be provided for the KenLMLanguageModel.\nPath {self.lm_path} is not valid.")
 
         self.state = kenlm.State()
         self.state2 = kenlm.State()
@@ -109,9 +115,9 @@ class NGramLanguageModel(LanguageModel):
         temp_state = kenlm.State()
 
         for char in self.symbol_set:
-            # Replace the space character with KenLM's <sp> token
+            # Replace the space character with whatever space token the model uses
             if char == ' ':
-                score = self.model.BaseScore(state, '<sp>', temp_state)
+                score = self.model.BaseScore(state, self.space_symbol, temp_state)
             else:
                 score = self.model.BaseScore(state, char.lower(), temp_state)
 

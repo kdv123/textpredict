@@ -45,6 +45,8 @@ class LanguageModel(ABC):
     """Parent class for Language Models."""
 
     symbol_set: List[str] = None
+    start_symbol: str = None
+    end_symbol: str = None
 
     def __init__(self,
                  symbol_set: List[str] = DEFAULT_SYMBOL_SET):
