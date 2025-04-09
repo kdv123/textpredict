@@ -1,11 +1,21 @@
 """Defines the language model base class."""
 from abc import ABC, abstractmethod
 from typing import List, Tuple
+from enum import Enum
 from string import ascii_uppercase, ascii_lowercase
 
-# Returns all uppercase English letters
-def alphabet_upper():
-    """Alphabet Upper
+class Case(Enum):
+    """Case
+    Enumeration type to handle upper and lower casing
+    """
+
+    UPPER = 0
+    LOWER = 1
+    MIXED = 2
+
+
+def alphabet(case: Case):
+    """Alphabet
 
     Function used to standardize the symbols we use as alphabet.
 
@@ -13,33 +23,17 @@ def alphabet_upper():
     -------
         array of letters.
     """
-    return list(ascii_uppercase)
+    if case == Case.UPPER:
+        # Returns all uppercase English letters
+        return list(ascii_uppercase)
+    elif case == Case.LOWER:
+        # Returns all lowercase English letters
+        return list(ascii_lowercase)
+    elif case == Case.MIXED:
+        # Returns all upper and lowercase English letters
+        return list(ascii_uppercase) + list(ascii_lowercase)
 
-# Returns all lowercase English letters
-def alphabet_lower():
-    """Alphabet Lower
-    
-    Function used to standardize the symbols we use as alphabet
-    
-    Returns
-    -------
-        array of letters.
-    """
-    return list(ascii_lowercase)
-
-# Returns all English letters in mixed case
-def alphabet_mixed():
-    """Alphabet Mixed
-    
-    Function used to standardize the symbols we use as alphabet
-    
-    Returns
-    -------
-        array of letters.
-    """
-    return alphabet_lower() + alphabet_upper()
-
-DEFAULT_SYMBOL_SET = alphabet_upper() + [' ']
+DEFAULT_SYMBOL_SET = alphabet(Case.UPPER) + [' ']
 
 class LanguageModel(ABC):
     """Parent class for Language Models."""
