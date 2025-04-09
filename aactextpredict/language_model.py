@@ -59,7 +59,7 @@ class LanguageModel(ABC):
         return cls.__name__.upper()
 
     @abstractmethod
-    def predict(self, evidence: List[str]) -> List[Tuple]:
+    def predict_character(self, evidence: List[str]) -> List[Tuple]:
         """
         Using the provided data, compute log likelihoods over the entire symbol set.
         Args:
@@ -67,6 +67,25 @@ class LanguageModel(ABC):
 
         Response:
             probability - dependent on response type, a list of words or symbols with probability
+        """
+        ...
+
+    @abstractmethod
+    def predict_word(self, 
+                     left_context: List[str], 
+                     right_context: List[str] = [" "],
+                     nbest: int = 3,
+                     ) -> List[Tuple]:
+        """
+        Using the provided data, compute log likelihoods over the next sequence of symbols
+        Args:
+            left_context - The text that precedes the desired prediction.
+            right_context - The text that will follow the desired prediction. For simple word
+                predictions, this should be a single space.
+            nbest - The number of top predictions to return
+
+        Response:
+            A list of tuples, (predicted text, log probability)
         """
         ...
 

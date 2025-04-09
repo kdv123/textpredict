@@ -23,3 +23,10 @@ class KenLMInstallationException(TextPredictException):
 
     Thrown when attempting to import kenlm without installing the module"""
     ...
+
+class WordPredictionsNotSupportedException(TextPredictException):
+    """Word Predictions Not Supported Exception.
+    
+    Thrown when attempting to query a model for word predictions that does not 
+    offer word prediction support"""
+    ...

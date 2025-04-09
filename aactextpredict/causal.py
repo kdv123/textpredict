@@ -5,7 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
 from aactextpredict.language_model import LanguageModel, DEFAULT_SYMBOL_SET
-from aactextpredict.exceptions import InvalidLanguageModelException
+from aactextpredict.exceptions import InvalidLanguageModelException, WordPredictionsNotSupportedException
 from scipy.special import logsumexp
 from scipy.special import softmax
 import time
@@ -197,7 +197,7 @@ class CausalLanguageModel(LanguageModel):
             result.append(self.tokenizer.decode([i]))
         return result
 
-    def predict(self, evidence: List[str]) -> List[Tuple]:
+    def predict_character(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
         the next symbol
@@ -410,6 +410,24 @@ class CausalLanguageModel(LanguageModel):
         self.predict_total_ns += end_ns - start_ns
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
+
+    def predict_word(self, 
+                     left_context: List[str], 
+                     right_context: List[str] = [" "],
+                     nbest: int = 3,
+                     ) -> List[Tuple]:
+        """
+        Using the provided data, compute log likelihoods over the next sequence of symbols
+        Args:
+            left_context - The text that precedes the desired prediction.
+            right_context - The text that will follow the desired prediction. For simple word
+                predictions, this should be a single space.
+            nbest - The number of top predictions to return
+
+        Response:
+            A list of tuples, (predicted text, log probability)
+        """
+        raise WordPredictionsNotSupportedException("Word predictions are not supported for this model.")
 
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""

@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import Optional, List, Tuple
 from aactextpredict.language_model import LanguageModel
-from aactextpredict.exceptions import InvalidLanguageModelException
+from aactextpredict.exceptions import InvalidLanguageModelException, WordPredictionsNotSupportedException
 import kenlm
 import numpy as np
 
@@ -21,7 +21,7 @@ class NGramLanguageModel(LanguageModel):
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
 
-    def predict(self, evidence: List[str]) -> List[Tuple]:
+    def predict_character(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
         the next symbol
@@ -61,6 +61,24 @@ class NGramLanguageModel(LanguageModel):
             next_char_pred = self.prob_dist(self.state2)
 
         return next_char_pred
+
+    def predict_word(self, 
+                     left_context: List[str], 
+                     right_context: List[str] = [" "],
+                     nbest: int = 3,
+                     ) -> List[Tuple]:
+        """
+        Using the provided data, compute log likelihoods over the next sequence of symbols
+        Args:
+            left_context - The text that precedes the desired prediction.
+            right_context - The text that will follow the desired prediction. For simple word
+                predictions, this should be a single space.
+            nbest - The number of top predictions to return
+
+        Response:
+            A list of tuples, (predicted text, log probability)
+        """
+        raise WordPredictionsNotSupportedException("Word predictions are not supported for this model.")
 
     def load(self) -> None:
         """
