@@ -30,3 +30,10 @@ class WordPredictionsNotSupportedException(TextPredictException):
     Thrown when attempting to query a model for word predictions that does not 
     offer word prediction support"""
     ...
+
+class InvalidCaseException(TextPredictException):
+    """Invalid Case Exception
+    
+    Thrown when attempting to use a character casing other than upper, lower, 
+    and mixed"""
+    ...

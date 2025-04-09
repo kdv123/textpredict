@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple
 from enum import Enum
 from string import ascii_uppercase, ascii_lowercase
+from exceptions import InvalidCaseException
 
 class Case(Enum):
     """Case
@@ -32,6 +33,8 @@ def alphabet(case: Case):
     elif case == Case.MIXED:
         # Returns all upper and lowercase English letters
         return list(ascii_uppercase) + list(ascii_lowercase)
+    else:
+        raise InvalidCaseException("Invalid case type provided.")
 
 DEFAULT_SYMBOL_SET = alphabet(Case.UPPER) + [' ']
 
