@@ -76,10 +76,12 @@ if __name__ == "__main__":
                         help="Output overall model data to JSON file with specified file name.")
     parser.add_argument("--fp16", action="store_true",
                         help="convert model to fp16 (CUDA only)")
-    parser.add_argument("--mixed-case-context", action="store_true", default=False,
-                        help="use mixed case left context")
+    parser.add_argument("--context-case", default="mixed",
+                        help="case of left context, options: upper, lower, mixed")
     parser.add_argument("--case-simple", action="store_true", default=False,
                         help="simple automatic casing of let context")
+    parser.add_argument("--inference-case", default="upper",
+                        help="case of inference symbol set, options: upper, lower, mixed")
     parser.add_argument("--ngram-lm",
                         help="ngram model to load")
     parser.add_argument("--ngram-mix", type=float, default=0.5,
@@ -227,8 +229,9 @@ if __name__ == "__main__":
                                  lm_left_context=args.left_context,
                                  beam_width=args.beam_width,
                                  fp16=args.fp16,
-                                 mixed_case_context=args.mixed_case_context,
+                                 context_case=args.context_case,
                                  case_simple=args.case_simple,
+                                 inference_case=args.inference_case,
                                  max_completed=args.max_completed,
                                  lora=args.lora,
                                  lora_path=args.lora_path,)

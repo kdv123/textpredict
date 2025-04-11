@@ -4,7 +4,7 @@ from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
-from aactextpredict.language_model import LanguageModel, DEFAULT_SYMBOL_SET
+from aactextpredict.language_model import LanguageModel, Case
 from aactextpredict.exceptions import InvalidLanguageModelException, WordPredictionsNotSupportedException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -24,8 +24,9 @@ class CausalLanguageModel(LanguageModel):
                  lm_left_context: str = "",
                  beam_width: int = None,
                  fp16: bool = False,
-                 mixed_case_context: bool = False,
+                 context_case: Case = Case.LOWER,
                  case_simple: bool = False,
+                 inference_case: Case = Case.UPPER,
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
@@ -40,8 +41,9 @@ class CausalLanguageModel(LanguageModel):
             lm_left_context    - text to condition start of sentence on
             beam_width         - how many hypotheses to keep during the search, None=off
             fp16               - convert model to fp16 to save memory/compute on CUDA
-            mixed_case_context - use mixed case for language model left context
+            context_case       - which case to use for language model left context
             case_simple        - simple fixing of left context case
+            inference_case     - which case to use for inference
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
             lora               - use LoRA adapter
             lora_path          - load LoRA adapter from Hugging Face or local directory
@@ -54,13 +56,13 @@ class CausalLanguageModel(LanguageModel):
         self.vocab = defaultdict(list)
         # Since subword token ids are integers, use a list instead of a dictionary
         self.index_to_word = []
-        self.index_to_word_lower = []
         self.symbol_set_lower = None
         self.device = lm_device
         self.left_context = lm_left_context
         self.fp16 = fp16
-        self.mixed_case_context = mixed_case_context
+        self.context_case = context_case
         self.case_simple = case_simple
+        self.inference_case = inference_case
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
@@ -78,6 +80,15 @@ class CausalLanguageModel(LanguageModel):
             print(f"WARNING: using causal language model without any pruning, this can be slow!")
         else:
             print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}")
+
+        if case_simple and context_case is not Case.MIXED:
+            print(f"WARNING: case simple selected but context will be converted to: {context_case} case.")
+
+        if (inference_case is Case.UPPER or inference_case is Case.MIXED) and 'A' not in self.symbol_set:
+            print(f"WARNING: inference case {inference_case} selected but symbol set does not contain 'A'")
+
+        if (inference_case is Case.LOWER or inference_case is Case.MIXED) and 'a' not in self.symbol_set:
+            print(f"WARNING: inference case {inference_case} selected but symbol set does not contain 'a'")
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -111,18 +122,20 @@ class CausalLanguageModel(LanguageModel):
 
         # Loop over all the subword tokens in the LLM
         for i in range(self.vocab_size):
-            # Create a map from the subword token integer ID to the mixed and lowercase string versions
+            # Create a map from the subword token integer ID to the string versions according to context case
             word = self.tokenizer.decode([i])
-            word_lower = word.lower()
+
+            if self.context_case is Case.UPPER:
+                word = word.upper()
+            elif self.context_case is Case.LOWER:
+                word = word.lower()
+
             self.index_to_word += word,
-            self.index_to_word_lower += word_lower,
 
             # Check if all the characters in the subword token are in our valid symbol set
             valid = True
-            for ch in word_lower:
-                if ch == ' ':
-                    continue
-                elif ch not in self.symbol_set_lower:
+            for ch in word:
+                if ch.lower() not in self.symbol_set_lower:
                     valid = False
                     break
 
@@ -131,7 +144,7 @@ class CausalLanguageModel(LanguageModel):
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
                 for j in range(len(word)):
-                    key = word_lower[0:j + 1]
+                    key = word[0:j + 1]
                     self.vocab[key] += i,
                     # Construct set for prefix of the word
                     self.vocab_set[key].add(i)
@@ -231,24 +244,24 @@ class CausalLanguageModel(LanguageModel):
                 cased_context += " "
             context = cased_context
 
-        context_lower = context.lower()
+        if self.context_case is Case.LOWER:
+            context = context.lower()
+
+        if self.context_case is Case.UPPER:
+            context = context.upper()
 
         # Index in the hypothesis string that is the next character after our context
-        target_pos = len(context_lower)
+        target_pos = len(context)
 
         # For stats purposes track length of the prefix we are extending from space to match
         # prefix_len = target_pos
 
         # Look for the last space in the context, or -1 if no begin_text in context yet
-        pos = context_lower.rfind(" ")
+        pos = context.rfind(" ")
         tokens = []
         tokens.extend(self.left_context_tokens)
         if pos >= 0:
-            # Optionally, we condition on upper and lower case left context
-            if self.mixed_case_context:
-                truncated_context = context[0:pos]
-            else:
-                truncated_context = context_lower[0:pos]
+            truncated_context = context[0:pos]
             tokens.extend(self._encode(truncated_context))
 
         # Constant indexes for use with the hypotheses tuples
@@ -261,7 +274,7 @@ class CausalLanguageModel(LanguageModel):
         # Note: we only include tokens after any in left context.
         start_length = 0
         for x in tokens[len(self.left_context_tokens):]:
-            start_length += len(self.index_to_word_lower[x])
+            start_length += len(self.index_to_word[x])
         current_hypos = [(0.0, tokens, start_length)]
 
         # We use a priority queue to track the top hypotheses during the beam search.
@@ -320,7 +333,7 @@ class CausalLanguageModel(LanguageModel):
                 extra_vocab_set = set()
 
                 # Extending this hypothesis must match the remaining text
-                remaining_context = context_lower[current[LEN]:]
+                remaining_context = context[current[LEN]:]
                 if len(remaining_context) == 0:
                     # There is no remaining context thus all subword tokens that are valid under our symbol set
                     # should be considered when computing the probability of the next character.
@@ -336,7 +349,7 @@ class CausalLanguageModel(LanguageModel):
                     # We may need to use a subword token that doesn't completely consume the remaining text.
                     # Find these by tokenizing all possible lengths of text starting from the current position.
                     for i in range(1, len(remaining_context)):
-                        tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
+                        tokenization = self._encode(context[current[LEN]:current[LEN] + i])
                         # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
                         if len(tokenization) == 1:
                             #extra_vocab += tokenization[0],
@@ -358,11 +371,11 @@ class CausalLanguageModel(LanguageModel):
                 for token_id in sorted_args[current_index]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
                         # For a hypothesis to finish it must extend beyond the existing typed context
-                        subword_len = len(self.index_to_word_lower[token_id])
+                        subword_len = len(self.index_to_word[token_id])
                         if (current[LEN] + subword_len) > len(context):
                             # Add this likelihood to the list for the character at the prediction position.
                             # Tracking the list and doing logsumpexp later was faster than doing it for each add.
-                            char_to_log_probs[self.index_to_word_lower[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
+                            char_to_log_probs[self.index_to_word[token_id][target_pos - current[LEN]]] += new_log_probs[current_index][token_id],
                             completed += 1
                             # Exit this hypothesis if we reach global limit or limit for a single hypothesis.
                             if self.max_completed and completed >= self.max_completed:
@@ -391,20 +404,27 @@ class CausalLanguageModel(LanguageModel):
 
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
-        for ch in self.symbol_set_lower:
-            # Handle cases when symbols are never seen
-            if ch in char_to_log_probs:
-                char_probs += logsumexp(char_to_log_probs[ch]),
+        for ch in self.symbol_set:
+            # Make sure spaces and other symbols don't get double-counted
+            if self.inference_case is Case.MIXED or not ch.isalpha():
+                if ch in char_to_log_probs:
+                    char_probs += logsumexp(char_to_log_probs[ch]),
+                else:
+                    # Handle cases when symbols are never seen
+                    char_probs += float("-inf"),
             else:
-                char_probs += float("-inf"),
+                if ch.lower() in char_to_log_probs or ch.upper() in char_to_log_probs:
+                    char_probs += logsumexp(char_to_log_probs[ch.lower()] or [] + char_to_log_probs[ch.upper()] or []),
+                else:
+                    # Handle cases when symbols are never seen
+                    char_probs += float("-inf"),
 
         # Normalize to a distribution that sums to 1
         char_probs = softmax(char_probs)
 
         next_char_pred = {}
-        for i, ch in enumerate(self.symbol_set_lower):
-            # This works even if ch is a space
-            next_char_pred[ch.upper()] = char_probs[i]
+        for i, ch in enumerate(self.symbol_set):
+            next_char_pred[ch] = char_probs[i]
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
