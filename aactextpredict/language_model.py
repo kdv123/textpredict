@@ -3,16 +3,16 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple
 from enum import Enum
 from string import ascii_uppercase, ascii_lowercase
-from exceptions import InvalidCaseException
+from aactextpredict.exceptions import InvalidCaseException
 
 class Case(Enum):
     """Case
     Enumeration type to handle upper and lower casing
     """
 
-    UPPER = 0
-    LOWER = 1
-    MIXED = 2
+    UPPER = "upper"
+    LOWER = "lower"
+    MIXED = "mixed"
 
 
 def alphabet(case: Case):
