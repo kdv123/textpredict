@@ -25,7 +25,7 @@ from sys import exit
 from scipy.stats import bootstrap
 from datetime import datetime
 from os import path
-from aactextpredict.language_model import DEFAULT_SYMBOL_SET
+from aactextpredict.language_model import DEFAULT_SYMBOL_SET, Case
 from socket import gethostname
 from torch import set_num_threads
 from psutil import cpu_count
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         print("ERROR: For classifier model you must specify name of model using --model-name")
         exit(1)
         
-    if args.case_simple and not args.mixed_case_context:
+    if args.case_simple and args.context_case is not Case.MIXED:
         print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
 
     # Handy stuff to print out in our log files
