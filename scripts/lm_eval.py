@@ -102,6 +102,8 @@ if __name__ == "__main__":
                         help="drop <s> and </s> words from phrases")
     parser.add_argument("--skip-oov-symbols", action="store_true",
                         help="skip symbols that aren't in our symbol set")
+    parser.add_argument("--ignore-case-backoff", action="store_true", 
+                        help="ignore case of tokens when rebuilding backed off tokens")
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -234,7 +236,8 @@ if __name__ == "__main__":
                                  inference_case=args.inference_case,
                                  max_completed=args.max_completed,
                                  lora=args.lora,
-                                 lora_path=args.lora_path,)
+                                 lora_path=args.lora_path,
+                                 ignore_case_backoff=args.ignore_case_backoff)
     elif model == 5:
         lm = Seq2SeqLanguageModel(symbol_set=symbol_set,
                                   lang_model_name=args.model_name,

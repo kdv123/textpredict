@@ -30,6 +30,7 @@ class CausalLanguageModel(LanguageModel):
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
+                 ignore_case_backoff: bool = False,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -66,6 +67,7 @@ class CausalLanguageModel(LanguageModel):
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
+        self.ignore_case_backoff = ignore_case_backoff
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -143,6 +145,10 @@ class CausalLanguageModel(LanguageModel):
             if valid:
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
+
+                if self.ignore_case_backoff:
+                    word = word.lower()
+
                 for j in range(len(word)):
                     key = word[0:j + 1]
                     self.vocab[key] += i,
@@ -334,13 +340,17 @@ class CausalLanguageModel(LanguageModel):
 
                 # Extending this hypothesis must match the remaining text
                 remaining_context = context[current[LEN]:]
+
+                if self.ignore_case_backoff:
+                    remaining_context = remaining_context.lower()
+
                 if len(remaining_context) == 0:
                     # There is no remaining context thus all subword tokens that are valid under our symbol set
                     # should be considered when computing the probability of the next character.
                     #vocab = self.valid_vocab
                     vocab_set = self.valid_vocab_set
                 else:
-                    if remaining_context in self.vocab:
+                    if remaining_context in self.vocab_set:
                         # We have a list of subword tokens that match the remaining text.
                         # They could be the same length as the remaining text or longer and have the remaining text as a prefix.
                         #vocab = self.vocab[remaining_context]
