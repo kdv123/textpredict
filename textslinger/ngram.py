@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import Optional, List, Tuple
-from aactextpredict.language_model import LanguageModel
-from aactextpredict.exceptions import InvalidLanguageModelException
+from textslinger.language_model import LanguageModel
+from textslinger.exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
 

@@ -2,14 +2,14 @@ from collections import Counter
 from typing import Optional, Dict, List, Tuple
 from math import isclose
 
-from aactextpredict.language_model import LanguageModel
-from aactextpredict.exceptions import InvalidLanguageModelException
+from textslinger.language_model import LanguageModel
+from textslinger.exceptions import InvalidLanguageModelException
 
 # pylint: disable=unused-import
 # flake8: noqa
 """All supported models must be imported"""
-from aactextpredict.causal import CausalLanguageModel
-from aactextpredict.ngram import NGramLanguageModel
+from textslinger.causal import CausalLanguageModel
+from textslinger.ngram import NGramLanguageModel
 
 class MixtureLanguageModel(LanguageModel):
     """

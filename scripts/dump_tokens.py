@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Dumps the token text of a LLM to standard out.
 
-from aactextpredict.causal import CausalLanguageModel
+from textslinger.causal import CausalLanguageModel
 import argparse
 
 if __name__ == "__main__":

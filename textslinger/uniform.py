@@ -1,7 +1,7 @@
 """Uniform language model"""
 from typing import Dict, List, Tuple, Union, Optional
 import numpy as np
-from aactextpredict.language_model import LanguageModel, DEFAULT_SYMBOL_SET
+from textslinger.language_model import LanguageModel, DEFAULT_SYMBOL_SET
 
 
 class UniformLanguageModel(LanguageModel):
