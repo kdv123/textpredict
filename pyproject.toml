@@ -10,11 +10,11 @@ authors = [
     {name="Keith Vertanen", email="vertanen@mtu.edu"},
     {name="CAMBI", email="cambi_support@googlegroups.com"},
 ]
-description = "Text prediction toolkit."
+description = "TextSlinger text prediction toolkit."
 readme = "README.md"
 requires-python = ">=3.9,<3.11"
 classifiers = [
-    'License :: MIT License',
+    'License :: OSI Approved :: MIT License',
     'Topic :: Scientific/Engineering :: Human Machine Interfaces',
     'Natural Language :: English',
     'Intended Audience :: Science/Research',
@@ -48,6 +48,7 @@ dependencies = [
 
 [project.license]
 file = "LICENSE.md"
+license = "MIT"
 
 [project.optional-dependencies]
 release = [
