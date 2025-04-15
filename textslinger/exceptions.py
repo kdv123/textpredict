@@ -1,8 +1,8 @@
 
-class TextPredictException(Exception):
-    """textpredict core exception.
+class TextSlingerException(Exception):
+    """textslinger core exception.
 
-    Thrown when an error occurs specific to textpredict core concepts.
+    Thrown when an error occurs specific to textslinger core concepts.
     """
 
     def __init__(self, message, errors=None):
@@ -11,14 +11,14 @@ class TextPredictException(Exception):
         self.errors = errors
 
 
-class InvalidLanguageModelException(TextPredictException):
+class InvalidLanguageModelException(TextSlingerException):
     """Invalid Language Model Exception.
 
     Thrown when attempting to load a language model from an invalid path"""
     ...
 
 
-class KenLMInstallationException(TextPredictException):
+class KenLMInstallationException(TextSlingerException):
     """KenLM Installation Exception.
 
     Thrown when attempting to import kenlm without installing the module"""
