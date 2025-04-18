@@ -56,7 +56,7 @@ if __name__ == "__main__":
             phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
         total_chars += len(phrase)
 
-        print(f"*** Phrase {i}: {phrase}")
+        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}")
         # Iterate over all character positions in the phrase
         j = 0
         phrase_keystrokes = 0
@@ -75,8 +75,8 @@ if __name__ == "__main__":
                 target_word += phrase[k]
                 k += 1
 
-            print(f" left: '{left_context}', target: '{target_word}', keystrokes: {phrase_keystrokes}, len: {len(phrase)}")
-            words = lm.predict_words(left_context, nbest=args.nbest)
+            print(f" left: '{left_context}', target: '{target_word}', keystrokes: {phrase_keystrokes}")
+            words = lm.predict_words(left_context, nbest=args.nbest, beam=args.beam)
             print(f" words: {words}")
 
             # See if we can get our target word via a prediction slot
