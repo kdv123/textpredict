@@ -22,6 +22,91 @@ class NGramLanguageModel(LanguageModel):
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
 
+    def predict_words(self,
+                      left_context: str,
+                      right_context: str = " ",
+                      nbest: int = None,
+                      beam: float = 5.0,
+                      return_log_probs = False) -> List[Tuple[str, float]]:
+        """
+        Given some left text context, predict the most likely next words.
+        Left and right context use normal space character for any spaces, we convert internally to <sp>
+        :param left_context: previous text we are condition on
+        :param right_context: characters that must appear right of our predicted next word
+        :param nbest: number of most likely words to return
+        :param beam: log-prob beam used during the search
+        :param return_log_probs: whether to return log probabilities of each word
+        :return: List of tuples with words and their log probabilities
+        """
+        state1 = kenlm.State()
+        state2 = kenlm.State()
+        # This sconditions on the sentence start token
+        self.model.BeginSentenceWrite(state1)
+
+        # Update the state one character at a time for the left context
+        # Also note the last space so we can figure out the prefix of the current word (if any)
+        # TODO: If we knew the order of the KenLM model, we might be able to truncate left_context
+        word_start_index = -1
+        for i in range(len(left_context)):
+            ch = left_context[i]
+            if ch == " ":
+                word_start_index = i
+                ch = "<sp>"
+            if i % 2 == 0:
+                log_prob = self.model.BaseScore(state1, ch, state2)
+            else:
+                log_prob = self.model.BaseScore(state2, ch, state1)
+        word_prefix = left_context[word_start_index+1:]
+        if len(left_context) % 2 == 0:
+            start_state = state1
+        else:
+            start_state = state2
+        # We can now search forward from the starting state
+        # A hypothesis needs to generate the right_context on the right side to finish
+        # Hypotheses are stored as a tuple (text, log prob, starting KenLM state)
+        hypo = ("", 0.0, start_state)
+        current_hypos = [hypo]
+        finished_hypos = []
+        best_finished_log_prob = float("-inf")
+
+        while len(current_hypos) > 0:
+            next_hypos = []
+            for hypo in current_hypos:
+                # Extend this hypothesis by all possible symbols
+                for ch in self.symbol_set:
+                    # TODO: Can we reuse state objects?
+                    out_state = kenlm.State()
+                    if ch == " ":
+                        use_ch = "<sp>"
+                    else:
+                        use_ch = ch
+                    log_prob = self.model.BaseScore(hypo[2], use_ch, out_state)
+                    new_hypo = (hypo[0] + ch, hypo[1] + log_prob, out_state)
+                    # See if we have finished by generating the right context
+                    if new_hypo[0].endswith(right_context):
+                        # Finished hypotheses don't need the KenLM state
+                        finished_hypos.append((new_hypo[0], new_hypo[1]))
+                        # See if we need to update the current best log prob of any hypothesis
+                        if new_hypo[1] > best_finished_log_prob:
+                            best_finished_log_prob = new_hypo[1]
+                    elif (best_finished_log_prob - new_hypo[1]) < beam:
+                        next_hypos.append(new_hypo)
+            current_hypos = next_hypos
+
+        finished_hypos.sort(key=lambda x: x[1], reverse=True)
+        if nbest is not None:
+            finished_hypos = finished_hypos[:nbest]
+
+        # Remove the right context from the results and add any prefix to the front
+        result = []
+        for hypo in finished_hypos:
+            # Optional return of log probabilities
+            if return_log_probs:
+                result.append((word_prefix + hypo[0].removesuffix(right_context), hypo[1]))
+            else:
+                result.append(word_prefix + hypo[0].removesuffix(right_context))
+        return result
+
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
@@ -49,7 +134,7 @@ class NGramLanguageModel(LanguageModel):
         # Update the state one token at a time based on evidence, alternate states
         for i, token in enumerate(context):
             if i % 2 == 0:
-                self.model.BaseScore(self.state, token.lower(), self.state2)
+                score = self.model.BaseScore(self.state, token.lower(), self.state2)
             else:
                 self.model.BaseScore(self.state2, token.lower(), self.state)
 
