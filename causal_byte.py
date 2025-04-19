@@ -225,7 +225,6 @@ class CausalByteLanguageModel(LanguageModel):
         finished_hypos = []
         best_finished_log_prob = float("-inf")
         pad_id = self.tokenizer.encode(self.tokenizer.pad_token)[0]
-        pruned = 0
 
         # TODO: Change to support flexible batch size in a single section of code
         # This version does the search in one giant minibatch
@@ -278,12 +277,7 @@ class CausalByteLanguageModel(LanguageModel):
                     elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
                             (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
                         next_hypos.append(new_hypo)
-                    else:
-                        pruned += 1
-
             current_hypos = next_hypos
-
-        print(f"search pruned = {pruned}")
 
         # We want them sorted from post probable to least probable
         finished_hypos.sort(key=lambda x: x[0], reverse=True)
