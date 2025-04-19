@@ -96,6 +96,7 @@ if __name__ == "__main__":
             phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
         total_chars += len(phrase)
 
+
         print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}")
         # Iterate over all character positions in the phrase
         j = 0
