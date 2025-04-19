@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # Computes keystroke savings of typing a set of phrases assume optimal use of 1 or more word predictions.
-#
+# Supports the following types of language models:
+#  1) n-gram character, via KenLM library
+#  2) ByGPT5 byte tokenized LLM, via Hugging Face plus uniformers library
+
 from ngram import NGramLanguageModel
 from timeit import default_timer as timer
 import argparse
 from datetime import datetime
-from language_model import alphabet
 from socket import gethostname
 import re
 
@@ -15,10 +17,12 @@ if __name__ == "__main__":
     parser.add_argument("--phrases", type=str, required=True, help="Input text file with phrases")
     parser.add_argument("--phrase-limit", type=int, help="Max phrases to evaluate")
     parser.add_argument("--lm", type=str, required=True, help="Filename of n-gram model to load")
-    parser.add_argument("--lower", action="store_true", help="lowercase phrases")
-    parser.add_argument("--strip", action="store_true", help="strip symbols except apostrophe")
+    parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
+    parser.add_argument("--strip", action="store_true", help="Strip symbols except apostrophe")
     parser.add_argument("--nbest", type=int, help="N-best list size", default=3)
-    parser.add_argument("--beam", type=float, help="log-prob beam for search", default=5.0)
+    parser.add_argument("--beam", type=float, help="Beam for search, log-prob", default=3.0)
+    parser.add_argument("--alphabet", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid characters")
+
     args = parser.parse_args()
 
     # Handy stuff to print out in our log files
@@ -37,8 +41,7 @@ if __name__ == "__main__":
     print(f"Number phrases loaded: {len(phrases)}")
 
     start = timer()
-    # TODO: tool currently assumes lowercase plus apostrophe and space
-    symbol_set = list("abcdefghijklmnopqrstuvwxyz' ")
+    symbol_set = list(args.alphabet)
     print(f"Symbol set: {symbol_set}")
 
     lm = NGramLanguageModel(symbol_set, args.lm, False)
