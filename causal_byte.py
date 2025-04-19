@@ -226,7 +226,6 @@ class CausalByteLanguageModel(LanguageModel):
         if self.batch_size is not None:
             # This version does the search one hypothesis at a time
             while len(current_hypos) > 0:
-                print("current_hypos: ", len(current_hypos))
                 next_hypos = []
                 while len(current_hypos) > 0:
                     hypo = current_hypos.pop()
