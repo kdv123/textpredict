@@ -26,8 +26,8 @@ class NGramLanguageModel(LanguageModel):
                       left_context: str,
                       right_context: str = " ",
                       nbest: int = None,
-                      beam: float = 5.0,
-                      return_log_probs = False) -> List[Tuple[str, float]]:
+                      beam: float = 3.0,
+                      return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
         Left and right context use normal space character for any spaces, we convert internally to <sp>
@@ -40,7 +40,7 @@ class NGramLanguageModel(LanguageModel):
         """
         state1 = kenlm.State()
         state2 = kenlm.State()
-        # This sconditions on the sentence start token
+        # This conditions the LM on the sentence start token
         self.model.BeginSentenceWrite(state1)
 
         # Update the state one character at a time for the left context
