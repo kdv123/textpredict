@@ -8,6 +8,7 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
+import heapq
 
 # This updates transformers 4.20.0 to be able to use the ByGPT5 tokenizer and model
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
@@ -224,6 +225,7 @@ class CausalByteLanguageModel(LanguageModel):
         finished_hypos = []
         best_finished_log_prob = float("-inf")
         pad_id = self.tokenizer.encode(self.tokenizer.pad_token)[0]
+        pruned = 0
 
         # TODO: Change to support flexible batch size in a single section of code
         # This version does the search in one giant minibatch
@@ -262,30 +264,38 @@ class CausalByteLanguageModel(LanguageModel):
                                 current_hypos[i][TOKENS].copy() + [self.symbol_index_to_vocab_index[j]])
                     # See if we have finished by generating the right context
                     if new_hypo[STR].endswith(right_context):
-                        # Finished hypotheses don't need the KenLM state
-                        finished_hypos.append((new_hypo[STR], new_hypo[LOGP]))
-
+                        if not nbest or len(finished_hypos) < nbest:
+                            # Add if we haven't reached our n-best limit so add
+                            heapq.heappush(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
+                        elif new_hypo[LOGP] > finished_hypos[0][LOGP]:
+                            # Or replace the worst hypotheses with the new one
+                            heapq.heappushpop(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
                         # See if we need to update the current best log prob of any hypothesis
                         if new_hypo[LOGP] > best_finished_log_prob:
                             best_finished_log_prob = new_hypo[LOGP]
-                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
+                    # Keep if it is still within beam width of our best hypothesis thus far
+                    # But if the n-best list is fully populated then we must beat the current worse on the heap
+                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
+                            (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
                         next_hypos.append(new_hypo)
+                    else:
+                        pruned += 1
 
             current_hypos = next_hypos
 
-        finished_hypos.sort(key=lambda x: x[1], reverse=True)
-        print(f"finished hypos: {finished_hypos}")
-        if nbest is not None:
-            finished_hypos = finished_hypos[:nbest]
-        print(f"finished hypos: {finished_hypos}")
+        print(f"search pruned = {pruned}")
+
+        # We want them sorted from post probable to least probable
+        finished_hypos.sort(key=lambda x: x[0], reverse=True)
 
         # Remove the right context from the results and add any prefix to the front
         result = []
         for hypo in finished_hypos:
             # Optional return of log probabilities
-            word = word_prefix + hypo[0].removesuffix(right_context)
+            word = word_prefix + hypo[1].removesuffix(right_context)
             # TODO: For now we only make lower case predictions
             word = word.lower()
+            # Reverse the order so it is word followed optionally by log prob
             if return_log_probs:
                 result.append((word, hypo[1]))
             else:
