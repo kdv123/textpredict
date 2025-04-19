@@ -1,11 +1,11 @@
 from collections import Counter
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Final
 from language_model import LanguageModel
 from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
-
+import heapq
 
 class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
@@ -61,10 +61,17 @@ class NGramLanguageModel(LanguageModel):
             start_state = state1
         else:
             start_state = state2
+
+        # Constant indexes for use with the hypotheses tuples
+        # log prob is first since we want to use a heap for the finished hypotheses
+        LOGP: Final[int] = 0
+        STR: Final[int] = 1
+        STATE: Final[int] = 2
+
         # We can now search forward from the starting state
         # A hypothesis needs to generate the right_context on the right side to finish
-        # Hypotheses are stored as a tuple (text, log prob, starting KenLM state)
-        hypo = ("", 0.0, start_state)
+        # Hypotheses are stored as a tuple (log prob, text, starting KenLM state)
+        hypo = (0.0, "", start_state)
         current_hypos = [hypo]
         finished_hypos = []
         best_finished_log_prob = float("-inf")
@@ -74,37 +81,44 @@ class NGramLanguageModel(LanguageModel):
             for hypo in current_hypos:
                 # Extend this hypothesis by all possible symbols
                 for ch in self.symbol_set:
-                    # TODO: Can we reuse state objects?
+                    # TODO: Can we reuse the KenLM state objects?
                     out_state = kenlm.State()
                     if ch == " ":
                         use_ch = "<sp>"
                     else:
                         use_ch = ch
-                    log_prob = self.model.BaseScore(hypo[2], use_ch, out_state)
-                    new_hypo = (hypo[0] + ch, hypo[1] + log_prob, out_state)
+                    log_prob = self.model.BaseScore(hypo[STATE], use_ch, out_state)
+                    new_hypo = (hypo[LOGP] + log_prob, hypo[STR] + ch, out_state)
                     # See if we have finished by generating the right context
-                    if new_hypo[0].endswith(right_context):
-                        # Finished hypotheses don't need the KenLM state
-                        finished_hypos.append((new_hypo[0], new_hypo[1]))
+                    if new_hypo[STR].endswith(right_context):
+                        if not nbest or len(finished_hypos) < nbest:
+                            # Add if we haven't reached our n-best limit so add
+                            heapq.heappush(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
+                        elif new_hypo[LOGP] > finished_hypos[0][LOGP]:
+                            # Or replace the worst hypotheses with the new one
+                            heapq.heappushpop(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
                         # See if we need to update the current best log prob of any hypothesis
-                        if new_hypo[1] > best_finished_log_prob:
-                            best_finished_log_prob = new_hypo[1]
-                    elif (best_finished_log_prob - new_hypo[1]) < beam:
+                        if new_hypo[LOGP] > best_finished_log_prob:
+                            best_finished_log_prob = new_hypo[LOGP]
+                    # Keep if it is still within beam width of our best hypothesis thus far
+                    # But if the n-best list is fully populated then we must beat the current worse on the heap
+                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
+                            (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
                         next_hypos.append(new_hypo)
+
             current_hypos = next_hypos
 
-        finished_hypos.sort(key=lambda x: x[1], reverse=True)
-        if nbest is not None:
-            finished_hypos = finished_hypos[:nbest]
+        # Reverse the order to get the most probable first
+        finished_hypos.sort(key=lambda x: x[LOGP], reverse=True)
 
         # Remove the right context from the results and add any prefix to the front
         result = []
         for hypo in finished_hypos:
             # Optional return of log probabilities
             if return_log_probs:
-                result.append((word_prefix + hypo[0].removesuffix(right_context), hypo[1]))
+                result.append((word_prefix + hypo[STR].removesuffix(right_context), hypo[LOGP]))
             else:
-                result.append(word_prefix + hypo[0].removesuffix(right_context))
+                result.append(word_prefix + hypo[STR].removesuffix(right_context))
         return result
 
     def predict(self, evidence: List[str]) -> List[Tuple]:

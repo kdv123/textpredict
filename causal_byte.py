@@ -279,7 +279,7 @@ class CausalByteLanguageModel(LanguageModel):
                         next_hypos.append(new_hypo)
             current_hypos = next_hypos
 
-        # We want them sorted from post probable to least probable
+        # We want them sorted with the most probable at the front (unlike the heap)
         finished_hypos.sort(key=lambda x: x[0], reverse=True)
 
         # Remove the right context from the results and add any prefix to the front
