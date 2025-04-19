@@ -29,7 +29,6 @@ class CausalByteLanguageModel(LanguageModel):
                  mixed_case_context: bool = False,
                  case_simple: bool = False,
                  normal_space: bool = False,
-                 batch_size: int = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -44,7 +43,6 @@ class CausalByteLanguageModel(LanguageModel):
             mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
             normal_space       - use normal space character instead of BciPy underscore
-            batch_size         - limit size of inference
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -62,7 +60,6 @@ class CausalByteLanguageModel(LanguageModel):
         self.case_simple = case_simple
         self.normal_space = normal_space
         self.symbol_index_to_vocab_index = []
-        self.batch_size = batch_size
 
         # Taken from: https://github.com/potamides/uniformers/blob/main/examples/inference/lm_perplexity.py
         # We need to add this to be able to use ByGPT5 with AutoModel
@@ -215,7 +212,9 @@ class CausalByteLanguageModel(LanguageModel):
         # A hypothesis needs to generate the right_context on the right side to finish
         # Hypotheses are stored as a tuple (log prob, text, tokens)
         # It was faster (CPU anyway) to have the token sequence in the hypotheses to avoid tokenizing from the string
+
         # Constant indexes for use with the hypotheses tuples
+        # log prob is first since we want to use a heap for the finished hypotheses
         LOGP: Final[int] = 0
         STR: Final[int] = 1
         TOKENS: Final[int] = 2
@@ -227,85 +226,52 @@ class CausalByteLanguageModel(LanguageModel):
         pad_id = self.tokenizer.encode(self.tokenizer.pad_token)[0]
 
         # TODO: Change to support flexible batch size in a single section of code
-        if self.batch_size is not None:
-            # This version does the search one hypothesis at a time
-            while len(current_hypos) > 0:
-                next_hypos = []
-                while len(current_hypos) > 0:
-                    hypo = current_hypos.pop()
+        # This version does the search in one giant minibatch
+        while len(current_hypos) > 0:
+            next_hypos = []
+            batch_tensors = []
 
-                    # Predict the probability distribution over the next character
-                    # TODO: This could probably parallize inference by packing a set of current hypotheses
-                    # NOTE: Need the [] since model expects a list of lists
-                    tensor = torch.tensor([hypo[2]]).to(self.device)
-                    with torch.no_grad():
-                        logits = self.model(tensor).logits  # Shape is (1, 1, 384)
-                        log_probs = torch.log_softmax(logits[-1, -1, :], dim=0).detach().cpu().numpy()
-                    log_probs = self._get_symbol_log_probs(log_probs=log_probs)
+            # Get length of longest sequence in our batch
+            max_length = 0
+            for i in range(len(current_hypos)):
+                max_length = max(max_length, len(current_hypos[i][2]))
 
-                    # Extend this hypothesis by all possible symbols
-                    for i in range(len(log_probs)):
-                        new_hypo = (hypo[LOGP] + log_probs[i],
-                                    hypo[STR] + self.symbol_set[i],
-                                    hypo[TOKENS].copy() + [self.symbol_index_to_vocab_index[i]])
+            for i in range(len(current_hypos)):
+                tokens = current_hypos[i][TOKENS]
+                # Pad out this sentence
+                while len(tokens) < max_length:
+                    tokens.append(pad_id)
+                batch_tensors.append(torch.tensor(tokens))
+            tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
 
-                        # See if we have finished by generating the right context
-                        if new_hypo[0].endswith(right_context):
-                            # Finished hypotheses don't need the KenLM state
-                            finished_hypos.append((new_hypo[LOGP], new_hypo[STR]))
-                            # See if we need to update the current best log prob of any hypothesis
-                            if new_hypo[LOGP] > best_finished_log_prob:
-                                best_finished_log_prob = new_hypo[LOGP]
-                        elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
-                            next_hypos.append(new_hypo)
-                current_hypos = next_hypos
-        elif self.batch_size is None:
-            # This version does the search in one giant minibatch
-            while len(current_hypos) > 0:
-                next_hypos = []
-                batch_tensors = []
+            with torch.no_grad():
+                logits = self.model(tokens_tensor).logits   # shape (batch_size, max_length, 384)
+                # We care about the logits in the last position of second dimension
+                # We want to sum to one in the last dimension over the first dimensions (different hypotheses)
+                log_probs = torch.log_softmax(logits[:,-1,:], dim=1).detach().cpu().numpy()
 
-                # Get length of longest sequence in our batch
-                max_length = 0
-                for i in range(len(current_hypos)):
-                    max_length = max(max_length, len(current_hypos[i][2]))
+            # For through all the current hypotheses and extend them by the symbol set
+            for i in range(len(current_hypos)):
+                # Limit to just the symbols we care about
+                log_probs_current = self._get_symbol_log_probs(log_probs=log_probs[i])
 
-                for i in range(len(current_hypos)):
-                    tokens = current_hypos[i][TOKENS]
-                    # Pad out this sentence
-                    while len(tokens) < max_length:
-                        tokens.append(pad_id)
-                    batch_tensors.append(torch.tensor(tokens))
-                tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
+                # Extend the ith current hypothesis by all possible symbols
+                for j in range(len(log_probs_current)):
+                    new_hypo = (current_hypos[i][LOGP] + log_probs_current[j],
+                                current_hypos[i][STR] + self.symbol_set[j],
+                                current_hypos[i][TOKENS].copy() + [self.symbol_index_to_vocab_index[j]])
+                    # See if we have finished by generating the right context
+                    if new_hypo[STR].endswith(right_context):
+                        # Finished hypotheses don't need the KenLM state
+                        finished_hypos.append((new_hypo[STR], new_hypo[LOGP]))
 
-                with torch.no_grad():
-                    logits = self.model(tokens_tensor).logits   # shape (batch_size, max_length, 384)
-                    # We care about the logits in the last position of second dimension
-                    # We want to sum to one in the last dimension over the first dimensions (different hypotheses)
-                    log_probs = torch.log_softmax(logits[:,-1,:], dim=1).detach().cpu().numpy()
+                        # See if we need to update the current best log prob of any hypothesis
+                        if new_hypo[LOGP] > best_finished_log_prob:
+                            best_finished_log_prob = new_hypo[LOGP]
+                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
+                        next_hypos.append(new_hypo)
 
-                # For through all the current hypotheses and extend them by the symbol set
-                for i in range(len(current_hypos)):
-                    # Limit to just the symbols we care about
-                    log_probs_current = self._get_symbol_log_probs(log_probs=log_probs[i])
-
-                    # Extend the ith current hypothesis by all possible symbols
-                    for j in range(len(log_probs_current)):
-                        new_hypo = (current_hypos[i][LOGP] + log_probs_current[j],
-                                    current_hypos[i][STR] + self.symbol_set[j],
-                                    current_hypos[i][TOKENS].copy() + [self.symbol_index_to_vocab_index[j]])
-                        # See if we have finished by generating the right context
-                        if new_hypo[STR].endswith(right_context):
-                            # Finished hypotheses don't need the KenLM state
-                            finished_hypos.append((new_hypo[STR], new_hypo[LOGP]))
-
-                            # See if we need to update the current best log prob of any hypothesis
-                            if new_hypo[LOGP] > best_finished_log_prob:
-                                best_finished_log_prob = new_hypo[LOGP]
-                        elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
-                            next_hypos.append(new_hypo)
-
-                current_hypos = next_hypos
+            current_hypos = next_hypos
 
         finished_hypos.sort(key=lambda x: x[1], reverse=True)
         print(f"finished hypos: {finished_hypos}")

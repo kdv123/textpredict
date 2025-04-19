@@ -31,7 +31,6 @@ if __name__ == "__main__":
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
-    parser.add_argument("--batch-size", type=int, help="Limit batch size during LLM inference")
 
     args = parser.parse_args()
 
@@ -81,8 +80,7 @@ if __name__ == "__main__":
                                      fp16=args.fp16,
                                      mixed_case_context=False,
                                      case_simple=args.case_simple,
-                                     normal_space=True,
-                                     batch_size=args.batch_size)
+                                     normal_space=True)
 
     print(f"Model load time = {timer() - start:.2f}")
 
