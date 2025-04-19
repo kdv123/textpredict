@@ -90,7 +90,10 @@ if __name__ == "__main__":
     total_keystrokes = 0
 
     # Iterate over all the phrases
+    total_predictions = 0
+    prediction_start = timer()
     for i, phrase in enumerate(phrases):
+        phrase_start = timer()
         phrase = phrase.strip()
         if args.lower:
             phrase = phrase.lower()
@@ -98,13 +101,11 @@ if __name__ == "__main__":
             phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
         total_chars += len(phrase)
 
-
         print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}")
-        # Iterate over all character positions in the phrase
         j = 0
         phrase_keystrokes = 0
-        total_predictions = 0
-        prediction_start = timer()
+        phrase_predictions = 0
+        # Iterate over all character positions in the phrase
         while j < len(phrase):
             left_context = phrase[0:j]
             # Figure out the target word
@@ -125,6 +126,7 @@ if __name__ == "__main__":
                 k += 1
             words = lm.predict_words(left_context, nbest=args.nbest, beam=args.beam)
             total_predictions += 1
+            phrase_predictions += 1
             print_words = ""
             for word in words:
                 if word == target_word:
@@ -147,10 +149,10 @@ if __name__ == "__main__":
             total_keystrokes += 1
             phrase_keystrokes += 1
         ks = (len(phrase) - phrase_keystrokes) / len(phrase) * 100.0
-        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} pred/sec {total_predictions / (timer() - prediction_start):.2f}")
+        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
     print(f"TIME: {timer() - start:.2f}")
-    print(f"PRED/SEC: {total_predictions / (timer() - prediction_start):.4f}")
+    print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")

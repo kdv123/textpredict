@@ -1,6 +1,5 @@
 import torch
-from typing import List, Tuple
-
+from typing import List, Tuple, Final
 from numpy import ndarray
 from numpy import sum
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -214,9 +213,14 @@ class CausalByteLanguageModel(LanguageModel):
 
         # We can now search forward from the starting state
         # A hypothesis needs to generate the right_context on the right side to finish
-        # Hypotheses are stored as a tuple (text, log prob, tokens)
+        # Hypotheses are stored as a tuple (log prob, text, tokens)
         # It was faster (CPU anyway) to have the token sequence in the hypotheses to avoid tokenizing from the string
-        hypo = ("", 0.0, tokens)
+        # Constant indexes for use with the hypotheses tuples
+        LOGP: Final[int] = 0
+        STR: Final[int] = 1
+        TOKENS: Final[int] = 2
+
+        hypo = (0.0, "", tokens)
         current_hypos = [hypo]
         finished_hypos = []
         best_finished_log_prob = float("-inf")
@@ -241,18 +245,18 @@ class CausalByteLanguageModel(LanguageModel):
 
                     # Extend this hypothesis by all possible symbols
                     for i in range(len(log_probs)):
-                        new_hypo = (hypo[0] + self.symbol_set[i],
-                                    hypo[1] + log_probs[i],
-                                    hypo[2].copy() + [self.symbol_index_to_vocab_index[i]])
+                        new_hypo = (hypo[LOGP] + log_probs[i],
+                                    hypo[STR] + self.symbol_set[i],
+                                    hypo[TOKENS].copy() + [self.symbol_index_to_vocab_index[i]])
 
                         # See if we have finished by generating the right context
                         if new_hypo[0].endswith(right_context):
                             # Finished hypotheses don't need the KenLM state
-                            finished_hypos.append((new_hypo[0], new_hypo[1]))
+                            finished_hypos.append((new_hypo[LOGP], new_hypo[STR]))
                             # See if we need to update the current best log prob of any hypothesis
-                            if new_hypo[1] > best_finished_log_prob:
-                                best_finished_log_prob = new_hypo[1]
-                        elif (best_finished_log_prob - new_hypo[1]) < beam:
+                            if new_hypo[LOGP] > best_finished_log_prob:
+                                best_finished_log_prob = new_hypo[LOGP]
+                        elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
                             next_hypos.append(new_hypo)
                 current_hypos = next_hypos
         elif self.batch_size is None:
@@ -267,21 +271,18 @@ class CausalByteLanguageModel(LanguageModel):
                     max_length = max(max_length, len(current_hypos[i][2]))
 
                 for i in range(len(current_hypos)):
-                    tokens = current_hypos[i][2]
+                    tokens = current_hypos[i][TOKENS]
                     # Pad out this sentence
                     while len(tokens) < max_length:
                         tokens.append(pad_id)
                     batch_tensors.append(torch.tensor(tokens))
                 tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
-                #print(f"tokens_tensor: {tokens_tensor}")
 
                 with torch.no_grad():
                     logits = self.model(tokens_tensor).logits   # shape (batch_size, max_length, 384)
-                    #print(f"logits: {logits.shape}")
                     # We care about the logits in the last position of second dimension
                     # We want to sum to one in the last dimension over the first dimensions (different hypotheses)
                     log_probs = torch.log_softmax(logits[:,-1,:], dim=1).detach().cpu().numpy()
-                #print(f"log_probs: {log_probs.shape}")
 
                 # For through all the current hypotheses and extend them by the symbol set
                 for i in range(len(current_hypos)):
@@ -290,25 +291,27 @@ class CausalByteLanguageModel(LanguageModel):
 
                     # Extend the ith current hypothesis by all possible symbols
                     for j in range(len(log_probs_current)):
-                        new_hypo = (current_hypos[i][0] + self.symbol_set[j],
-                                    current_hypos[i][1] + log_probs_current[j],
-                                    current_hypos[i][2].copy() + [self.symbol_index_to_vocab_index[j]])
-
+                        new_hypo = (current_hypos[i][LOGP] + log_probs_current[j],
+                                    current_hypos[i][STR] + self.symbol_set[j],
+                                    current_hypos[i][TOKENS].copy() + [self.symbol_index_to_vocab_index[j]])
                         # See if we have finished by generating the right context
-                        if new_hypo[0].endswith(right_context):
+                        if new_hypo[STR].endswith(right_context):
                             # Finished hypotheses don't need the KenLM state
-                            finished_hypos.append((new_hypo[0], new_hypo[1]))
+                            finished_hypos.append((new_hypo[STR], new_hypo[LOGP]))
+
                             # See if we need to update the current best log prob of any hypothesis
-                            if new_hypo[1] > best_finished_log_prob:
-                                best_finished_log_prob = new_hypo[1]
-                        elif (best_finished_log_prob - new_hypo[1]) < beam:
+                            if new_hypo[LOGP] > best_finished_log_prob:
+                                best_finished_log_prob = new_hypo[LOGP]
+                        elif (best_finished_log_prob - new_hypo[LOGP]) < beam:
                             next_hypos.append(new_hypo)
 
                 current_hypos = next_hypos
 
         finished_hypos.sort(key=lambda x: x[1], reverse=True)
+        print(f"finished hypos: {finished_hypos}")
         if nbest is not None:
             finished_hypos = finished_hypos[:nbest]
+        print(f"finished hypos: {finished_hypos}")
 
         # Remove the right context from the results and add any prefix to the front
         result = []
