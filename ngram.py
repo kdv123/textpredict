@@ -84,8 +84,6 @@ class NGramLanguageModel(LanguageModel):
         finished_hypos = []
         best_finished_log_prob = float("-inf")
 
-        created = 0
-
         while len(current_hypos) > 0:
             next_hypos = []
             # Loop backwords since the most probable is at the end of the heap
