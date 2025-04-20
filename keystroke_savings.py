@@ -31,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
+    parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
 
     args = parser.parse_args()
 
@@ -86,6 +87,7 @@ if __name__ == "__main__":
 
     total_chars = 0
     total_keystrokes = 0
+    total_truncated = 0
 
     # Iterate over all the phrases
     total_predictions = 0
@@ -97,9 +99,23 @@ if __name__ == "__main__":
             phrase = phrase.lower()
         if args.strip:
             phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
+
+        # Optionally we truncated phrases that are too long
+        # This can avoid OOM for the LLM doing things in batches
+        truncated = ""
+        if args.max_len and len(phrase) > args.max_len:
+            # First cut it off
+            phrase = phrase[:args.max_len]
+            # Then remove characters until we reach a space
+            while phrase[-1] != " ":
+                phrase = phrase[:-1]
+            phrase = phrase.strip()
+            total_truncated += 1
+            truncated = ", TRUNCATED"
+
         total_chars += len(phrase)
 
-        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}")
+        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}{truncated}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
@@ -151,6 +167,7 @@ if __name__ == "__main__":
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
+    print(f"TRUNCATED: {total_truncated}")
     print(f"TIME: {timer() - start:.2f}")
     print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
