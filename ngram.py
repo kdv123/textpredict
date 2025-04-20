@@ -22,6 +22,14 @@ class NGramLanguageModel(LanguageModel):
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
 
+        # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
+        self.symbol_set_converted = []
+        for symbol in symbol_set:
+            if symbol == " ":
+                self.symbol_set_converted.append("<sp>")
+            else:
+                self.symbol_set_converted.append(symbol)
+
     def predict_words(self,
                       left_context: str,
                       right_context: str = " ",
@@ -47,7 +55,6 @@ class NGramLanguageModel(LanguageModel):
         # Also note the last space so we can figure out the prefix of the current word (if any)
         # Shorten to one character less than the order of the n-gram model
         truncated_left_context = left_context[-self.model.order+1:]
-        #print(f"left_context '{left_context}', truncated_left_context '{truncated_left_context}'")
 
         # Advance the language model state base on the left context
         for i in range(len(truncated_left_context)):
@@ -84,6 +91,9 @@ class NGramLanguageModel(LanguageModel):
         finished_hypos = []
         best_finished_log_prob = float("-inf")
 
+        # Reuseable KenLM state, we use this to compute the probability of next character before we decide if we are keeping it
+        temp_out_state = kenlm.State()
+
         while len(current_hypos) > 0:
             next_hypos = []
             # Loop backwords since the most probable is at the end of the heap
@@ -91,31 +101,29 @@ class NGramLanguageModel(LanguageModel):
             for i in reversed(range(len(current_hypos))):
                 hypo = current_hypos[i]
                 # Extend this hypothesis by all possible symbols
-                for ch in self.symbol_set:
-                    # TODO: Can we reuse the KenLM state objects?
-                    out_state = kenlm.State()
-                    if ch == " ":
-                        use_ch = "<sp>"
-                    else:
-                        use_ch = ch
-                    log_prob = self.model.BaseScore(hypo[STATE], use_ch, out_state)
-                    new_hypo = (hypo[LOGP] + log_prob, hypo[STR] + ch, out_state)
+                for j in range(len(self.symbol_set)):
+                    # Compute the new log prob and string for our candidate new hypothesis
+                    # NOTE: We convert normal character to any special version in the LM, e.g. " " -> "<sp>"
+                    new_log_prob = hypo[LOGP] + self.model.BaseScore(hypo[STATE], self.symbol_set_converted[j], temp_out_state)
+                    new_str = hypo[STR] + self.symbol_set[j]
+
                     # See if we have finished by generating the right context
-                    if new_hypo[STR].endswith(right_context):
+                    if new_str.endswith(right_context):
                         if not nbest or len(finished_hypos) < nbest:
                             # Add if we haven't reached our n-best limit so add
-                            heapq.heappush(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
-                        elif new_hypo[LOGP] > finished_hypos[0][LOGP]:
+                            heapq.heappush(finished_hypos, (new_log_prob, new_str))
+                        elif new_log_prob > finished_hypos[0][LOGP]:
                             # Or replace the worst hypotheses with the new one
-                            heapq.heappushpop(finished_hypos, (new_hypo[LOGP], new_hypo[STR]))
+                            heapq.heappushpop(finished_hypos, (new_log_prob, new_str))
                         # See if we need to update the current best log prob of any hypothesis
-                        if new_hypo[LOGP] > best_finished_log_prob:
-                            best_finished_log_prob = new_hypo[LOGP]
+                        if new_log_prob > best_finished_log_prob:
+                            best_finished_log_prob = new_log_prob
                     # Keep if it is still within beam width of our best hypothesis thus far
-                    # But if the n-best list is fully populated then we must beat the current worse on the heap
-                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
-                            (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
-                        next_hypos.append(new_hypo)
+                    # But if the n-best list is fully populated then we must beat the current worst hypothesis on the heap (first element)
+                    elif (best_finished_log_prob - new_log_prob) < beam and \
+                            (not nbest or len(finished_hypos) < nbest or new_log_prob > finished_hypos[0][LOGP]):
+                        # Now that we know we are keeping it, we'll make a copy of the KenLM state object
+                        next_hypos.append((new_log_prob, new_str, temp_out_state.__copy__()))
             # Swap in the next hypotheses for the current so the outer loop keeps going
             current_hypos = next_hypos
 
@@ -125,7 +133,7 @@ class NGramLanguageModel(LanguageModel):
         # Remove the right context from the results and add any prefix to the front
         result = []
         for hypo in finished_hypos:
-            # Optional return of log probabilities
+            # Optional return of log probs in our result list
             if return_log_probs:
                 result.append((word_prefix + hypo[STR].removesuffix(right_context), hypo[LOGP]))
             else:
