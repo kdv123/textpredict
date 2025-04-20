@@ -40,27 +40,35 @@ class NGramLanguageModel(LanguageModel):
         """
         state1 = kenlm.State()
         state2 = kenlm.State()
-        # This conditions the LM on the sentence start token
+        # Condition the LM on the sentence start token since we may not have enough left context to move <s> out of the markov window
         self.model.BeginSentenceWrite(state1)
 
         # Update the state one character at a time for the left context
         # Also note the last space so we can figure out the prefix of the current word (if any)
-        # TODO: If we knew the order of the KenLM model, we might be able to truncate left_context
-        word_start_index = -1
-        for i in range(len(left_context)):
-            ch = left_context[i]
+        # Shorten to one character less than the order of the n-gram model
+        truncated_left_context = left_context[-self.model.order+1:]
+        #print(f"left_context '{left_context}', truncated_left_context '{truncated_left_context}'")
+
+        # Advance the language model state base on the left context
+        for i in range(len(truncated_left_context)):
+            ch = truncated_left_context[i]
             if ch == " ":
-                word_start_index = i
                 ch = "<sp>"
             if i % 2 == 0:
-                log_prob = self.model.BaseScore(state1, ch, state2)
+                self.model.BaseScore(state1, ch, state2)
             else:
-                log_prob = self.model.BaseScore(state2, ch, state1)
-        word_prefix = left_context[word_start_index+1:]
-        if len(left_context) % 2 == 0:
+                self.model.BaseScore(state2, ch, state1)
+        if len(truncated_left_context) % 2 == 0:
             start_state = state1
         else:
             start_state = state2
+
+        # Find the rightmost space
+        word_start_index = -1
+        for i in range(len(left_context)):
+            if left_context[i] == " ":
+                word_start_index = i
+        word_prefix = left_context[word_start_index+1:]
 
         # Constant indexes for use with the hypotheses tuples
         # log prob is first since we want to use a heap for the finished hypotheses
@@ -75,6 +83,8 @@ class NGramLanguageModel(LanguageModel):
         current_hypos = [hypo]
         finished_hypos = []
         best_finished_log_prob = float("-inf")
+
+        created = 0
 
         while len(current_hypos) > 0:
             next_hypos = []
@@ -108,7 +118,7 @@ class NGramLanguageModel(LanguageModel):
                     elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
                             (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
                         next_hypos.append(new_hypo)
-
+            # Swap in the next hypotheses for the current so the outer loop keeps going
             current_hypos = next_hypos
 
         # Reverse the order to get the most probable first
@@ -122,6 +132,7 @@ class NGramLanguageModel(LanguageModel):
                 result.append((word_prefix + hypo[STR].removesuffix(right_context), hypo[LOGP]))
             else:
                 result.append(word_prefix + hypo[STR].removesuffix(right_context))
+
         return result
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
