@@ -78,7 +78,10 @@ class NGramLanguageModel(LanguageModel):
 
         while len(current_hypos) > 0:
             next_hypos = []
-            for hypo in current_hypos:
+            # Loop backwords since the most probable is at the end of the heap
+            # This should improve our ability to prune
+            for i in reversed(range(len(current_hypos))):
+                hypo = current_hypos[i]
                 # Extend this hypothesis by all possible symbols
                 for ch in self.symbol_set:
                     # TODO: Can we reuse the KenLM state objects?

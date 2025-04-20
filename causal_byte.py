@@ -252,7 +252,9 @@ class CausalByteLanguageModel(LanguageModel):
                 log_probs = torch.log_softmax(logits[:,-1,:], dim=1).detach().cpu().numpy()
 
             # For through all the current hypotheses and extend them by the symbol set
-            for i in range(len(current_hypos)):
+            # Loop backwords since the most probable is at the end of the heap
+            # This should improve our ability to prune
+            for i in reversed(range(len(current_hypos))):
                 # Limit to just the symbols we care about
                 log_probs_current = self._get_symbol_log_probs(log_probs=log_probs[i])
 
