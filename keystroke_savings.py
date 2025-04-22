@@ -168,6 +168,7 @@ if __name__ == "__main__":
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
     print(f"TRUNCATED: {total_truncated}")
+    print(f"CHARS, KEYSTROKES, PHRASES: {total_chars} {total_keystrokes} {len(phrases)}")
     print(f"TIME: {timer() - start:.2f}")
     print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
