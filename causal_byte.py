@@ -190,7 +190,7 @@ class CausalByteLanguageModel(LanguageModel):
         :param nbest: number of most likely words to return
         :param beam: log-prob beam used during the search
         :param return_log_probs: whether to return log probabilities of each word
-        :return: List of tuples with words and their log probabilities
+        :return: List of tuples with words and (optionally) their log probabilities
         """
         # Optional simple case of left context
         left_context = self._simple_case(context=left_context)
@@ -212,7 +212,7 @@ class CausalByteLanguageModel(LanguageModel):
         # We can now search forward from the starting state
         # A hypothesis needs to generate the right_context on the right side to finish
         # Hypotheses are stored as a tuple (log prob, text, tokens)
-        # It was faster (CPU anyway) to have the token sequence in the hypotheses to avoid tokenizing from the string
+        # It was faster (CPU anyway) to have the token sequence in the hypotheses to avoid re-tokenizing repeatedly from the string
 
         # Constant indexes for use with the hypotheses tuples
         # log prob is first since we want to use a heap for the finished hypotheses
