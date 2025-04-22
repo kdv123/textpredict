@@ -11,6 +11,10 @@ CUDA=${1}
 #  FINAL KS: 50.1536
 
 # Result: cheetah, 2080Ti GPU, 4/22/25
+#  TRUNCATED: 0
+#  TIME: 423.73
+#  SECS/PRED: 0.2003
+#  FINAL KS: 50.1299
 
 MODEL_NAME=nllg/bygpt5-small-en
 PHRASES=comm_case_dev.txt
