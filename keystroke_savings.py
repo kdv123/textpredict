@@ -32,6 +32,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
     parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
+    parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
 
     args = parser.parse_args()
 
@@ -113,9 +114,11 @@ if __name__ == "__main__":
             total_truncated += 1
             truncated = ", TRUNCATED"
 
-        total_chars += len(phrase)
+        phrase_len = len(phrase)
 
-        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}{truncated}")
+        total_chars += phrase_len
+
+        print(f"*** Phrase {i}: {phrase}, len: {phrase_len}{truncated}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
@@ -162,8 +165,8 @@ if __name__ == "__main__":
 
             total_keystrokes += 1
             phrase_keystrokes += 1
-        ks = (len(phrase) - phrase_keystrokes) / len(phrase) * 100.0
-        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+        ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
+        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
