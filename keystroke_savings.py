@@ -115,6 +115,8 @@ if __name__ == "__main__":
             truncated = ", TRUNCATED"
 
         phrase_len = len(phrase)
+        if args.trailing_space:
+            phrase_len += 1
 
         total_chars += phrase_len
 
