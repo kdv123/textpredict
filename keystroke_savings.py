@@ -33,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
     parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
+    parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
 
     args = parser.parse_args()
 
@@ -127,9 +128,10 @@ if __name__ == "__main__":
         # Iterate over all character positions in the phrase
         while j < len(phrase):
             left_context = phrase[0:j]
+
             # Figure out the target word
             # If the next letter is space, then our target is the current word
-            if j> 0 and phrase[j] == " ":
+            if j > 0 and phrase[j] == " ":
                 k = j - 1
             else:
                 k = j
@@ -143,7 +145,16 @@ if __name__ == "__main__":
             while k < len(phrase) and phrase[k] != " ":
                 target_word += phrase[k]
                 k += 1
-            words = lm.predict_words(left_context, nbest=args.nbest, beam=args.beam)
+
+            # Adjust to one less prediction if using literal slot and not at the start of a word
+            nbest = args.nbest
+            if len(left_context) > 0 and args.literal_slot:
+                nbest -= 1
+            words = lm.predict_words(left_context, nbest=nbest, beam=args.beam)
+            # Add the literal text type as the final slot
+            if len(left_context) > 0 and args.literal_slot:
+                words.append(left_context)
+
             total_predictions += 1
             phrase_predictions += 1
             print_words = ""
