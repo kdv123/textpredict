@@ -147,12 +147,13 @@ if __name__ == "__main__":
                 k += 1
 
             # Adjust to one less prediction if using literal slot and not at the start of a word
+            use_literal = args.literal_slot and len(left_context) > 0 and left_context[-1] != " "
             nbest = args.nbest
-            if phrase[j] == " " and args.literal_slot:
+            if use_literal:
                 nbest -= 1
             words = lm.predict_words(left_context, nbest=nbest, beam=args.beam)
             # Add the literal text type as the final slot
-            if phrase[j] == " " and args.literal_slot:
+            if use_literal:
                 words.append(left_context)
 
             total_predictions += 1
