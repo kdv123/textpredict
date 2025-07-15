@@ -12,6 +12,7 @@ from datetime import datetime
 from socket import gethostname
 import re
 import sys
+from causal import CausalLanguageModel
 
 if __name__ == "__main__":
 
@@ -27,14 +28,15 @@ if __name__ == "__main__":
     parser.add_argument("--model-name", help="Model name of LLM")
     parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
     parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
+    parser.add_argument("--causal", action="store_true", help="LLM uses causal tokenization")
     parser.add_argument("--fp16", action="store_true", help="Convert LLM to fp16 (CUDA only)")
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
     parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
-    parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
-    parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
-
+    parser.add_argument("--left-context", default="", help="left language model context for causal model")
+    parser.add_argument("--mixed-case-context", action="store_true", default=False,
+                        help="use mixed case left context")
     args = parser.parse_args()
 
     if not args.lm and not args.model_name:
@@ -84,6 +86,19 @@ if __name__ == "__main__":
                                      mixed_case_context=False,
                                      case_simple=args.case_simple,
                                      normal_space=True)
+    elif args.causal:
+        print()
+        lm = CausalLanguageModel(symbol_set=symbols,
+                                 lang_model_name=args.model_name,
+                                 lm_device=device,
+                                 lm_path=args.model_dir,
+                                 lm_left_context=args.left_context,
+                                 beam_width=args.beam,
+                                 fp16=args.fp16,
+                                 mixed_case_context=args.mixed_case_context,
+                                 case_simple=args.case_simple,
+                                 max_completed=32000)
+        print(lm.model_name)
 
     print(f"Model load time = {timer() - start:.2f}")
 
@@ -115,23 +130,18 @@ if __name__ == "__main__":
             total_truncated += 1
             truncated = ", TRUNCATED"
 
-        phrase_len = len(phrase)
-        if args.trailing_space:
-            phrase_len += 1
+        total_chars += len(phrase)
 
-        total_chars += phrase_len
-
-        print(f"*** Phrase {i}: {phrase}, len: {phrase_len}{truncated}")
+        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}{truncated}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
         # Iterate over all character positions in the phrase
         while j < len(phrase):
             left_context = phrase[0:j]
-
             # Figure out the target word
             # If the next letter is space, then our target is the current word
-            if j > 0 and phrase[j] == " ":
+            if j> 0 and phrase[j] == " ":
                 k = j - 1
             else:
                 k = j
@@ -145,17 +155,7 @@ if __name__ == "__main__":
             while k < len(phrase) and phrase[k] != " ":
                 target_word += phrase[k]
                 k += 1
-
-            # Adjust to one less prediction if using literal slot and not at the start of a word
-            use_literal = args.literal_slot and len(left_context) > 0 and left_context[-1] != " "
-            nbest = args.nbest
-            if use_literal:
-                nbest -= 1
-            words = lm.predict_words(left_context, nbest=nbest, beam=args.beam)
-            # Add the literal text type as the final slot
-            if use_literal:
-                words.append(left_context)
-
+            words = lm.predict_words(left_context, nbest=args.nbest, beam=args.beam)
             total_predictions += 1
             phrase_predictions += 1
             print_words = ""
@@ -179,13 +179,12 @@ if __name__ == "__main__":
 
             total_keystrokes += 1
             phrase_keystrokes += 1
-        ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
-        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+        ks = (len(phrase) - phrase_keystrokes) / len(phrase) * 100.0
+        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
     print(f"TRUNCATED: {total_truncated}")
-    print(f"CHARS, KEYSTROKES, PHRASES: {total_chars} {total_keystrokes} {len(phrases)}")
     print(f"TIME: {timer() - start:.2f}")
     print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
