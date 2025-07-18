@@ -179,8 +179,11 @@ if __name__ == "__main__":
 
             total_keystrokes += 1
             phrase_keystrokes += 1
+            sys.stdout.flush()
+
         ks = (len(phrase) - phrase_keystrokes) / len(phrase) * 100.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+        sys.stdout.flush()
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
