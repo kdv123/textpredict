@@ -23,7 +23,8 @@ if __name__ == "__main__":
     parser.add_argument("--strip", action="store_true", help="Strip symbols except apostrophe")
     parser.add_argument("--nbest", type=int, help="N-best list size", default=3)
     parser.add_argument("--beam", type=float, help="Beam for search, log-prob", default=3.0)
-    parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols")
+    parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
+    parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--model-name", help="Model name of LLM")
     parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
     parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
@@ -59,6 +60,8 @@ if __name__ == "__main__":
     start = timer()
     symbols = list(args.symbols)
     print(f"Symbols, size {len(symbols)}: {symbols}")
+
+    print(f"Word end symbols: {args.word_end_symbols}")
 
     lm = None
     device = "cpu"
@@ -151,7 +154,7 @@ if __name__ == "__main__":
             nbest = args.nbest
             if use_literal:
                 nbest -= 1
-            words = lm.predict_words(left_context, nbest=nbest, beam=args.beam)
+            words = lm.predict_words(left_context, nbest=nbest, beam=args.beam, word_end_symbols=args.word_end_symbols)
             # Add the literal text type as the final slot
             if use_literal:
                 words.append(left_context)

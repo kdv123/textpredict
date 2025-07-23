@@ -5,7 +5,6 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
-import heapq
 
 class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
@@ -43,7 +42,7 @@ class NGramLanguageModel(LanguageModel):
 
     def predict_words(self,
                       left_context: str,
-                      right_context: str = " ",
+                      word_end_symbols: List[str] = None,
                       nbest: int = None,
                       beam: float = 3.0,
                       return_log_probs = False) -> List:
@@ -51,12 +50,18 @@ class NGramLanguageModel(LanguageModel):
         Given some left text context, predict the most likely next words.
         Left and right context use normal space character for any spaces, we convert internally to space symbol, e.g. <sp>
         :param left_context: previous text we are condition on
-        :param right_context: characters that must appear right of our predicted next word
+        :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
         :param nbest: number of most likely words to return
-        :param beam: log-prob beam used during the search
+        :param beam: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
         :param return_log_probs: whether to return log probabilities of each word
         :return: List of tuples with words and their log probabilities
         """
+
+        # Since List is a mutable type, we can't set a default reliably in the method declaration
+        # We'll set the default of a trailing space if caller didn't specify a list of right contexts
+        if word_end_symbols is None:
+            word_end_symbols = [" "]
+
         state1 = kenlm.State()
         state2 = kenlm.State()
         # Condition the LM on the sentence start token since we may not have enough left context to move <s> out of the markov window
@@ -88,68 +93,85 @@ class NGramLanguageModel(LanguageModel):
                 word_start_index = i
         word_prefix = left_context[word_start_index+1:]
 
-        # Constant indexes for use with the hypotheses tuples
-        # log prob is first since we want to use a heap for the finished hypotheses
+        # Reuseable KenLM state, we use this to compute the probability of next character before we decide if we are keeping it
+        temp_out_state = kenlm.State()
+
+        # Create a symbol set that also includes any end of word symbols that aren't in our normal symbol set
+        # If any of the end symbols occur in the normal symbol set, we include at end of list
+        search_symbols = []
+        for symbol in self.symbol_set:
+            if symbol not in word_end_symbols:
+                search_symbols.append(symbol)
+        index_first_end_symbol = len(search_symbols)
+        for end_symbol in word_end_symbols:
+            search_symbols.append(end_symbol)
+
+        # Parallel version of the set of all search symbols that handles any conversion to pseudo-words needed by LM like <sp>
+        search_symbols_converted = []
+        for symbol in search_symbols:
+            if symbol == " ":
+                search_symbols_converted.append(self.space_symbol)
+            else:
+                search_symbols_converted.append(symbol)
+
+        # We store hypotheses in a list with a tuple (log_prob, current word characters, KenLM state)
+        current_hypos = [(0.0, "", start_state)]
+
         LOGP: Final[int] = 0
         STR: Final[int] = 1
         STATE: Final[int] = 2
 
-        # We can now search forward from the starting state
-        # A hypothesis needs to generate the right_context on the right side to finish
-        # Hypotheses are stored as a tuple (log prob, text, starting KenLM state)
-        hypo = (0.0, "", start_state)
-        current_hypos = [hypo]
-        finished_hypos = []
+        # Finished hypotheses map a word string (without ending symbols) to its log prob
+        # We use a dictionary since we may want to merge hypotheses that are the same word
+        finished_hypos = {}
         best_finished_log_prob = float("-inf")
-
-        # Reuseable KenLM state, we use this to compute the probability of next character before we decide if we are keeping it
-        temp_out_state = kenlm.State()
 
         while len(current_hypos) > 0:
             next_hypos = []
-            # Loop backwords since the most probable is at the end of the heap
-            # This should improve our ability to prune
-            for i in reversed(range(len(current_hypos))):
-                hypo = current_hypos[i]
+
+            for hypo in current_hypos:
                 # Extend this hypothesis by all possible symbols
-                for j in range(len(self.symbol_set)):
+                # This could include symbols that were specified to end words but aren't valid character inside of words
+                for i in range(len(search_symbols)):
                     # Compute the new log prob and string for our candidate new hypothesis
                     # NOTE: We convert normal characters to any special version in the LM, e.g. " " -> "<sp>"
-                    new_log_prob = hypo[LOGP] + self.model.BaseScore(hypo[STATE], self.symbol_set_converted[j], temp_out_state)
-                    new_str = hypo[STR] + self.symbol_set[j]
+                    new_log_prob = hypo[LOGP] + self.model.BaseScore(hypo[STATE], search_symbols_converted[i], temp_out_state)
 
-                    # See if we have finished by generating the right context
-                    if new_str.endswith(right_context):
-                        if not nbest or len(finished_hypos) < nbest:
-                            # Add if we haven't reached our n-best limit so add
-                            heapq.heappush(finished_hypos, (new_log_prob, new_str))
-                        elif new_log_prob > finished_hypos[0][LOGP]:
-                            # Or replace the worst hypotheses with the new one
-                            heapq.heappushpop(finished_hypos, (new_log_prob, new_str))
-                        # See if we need to update the current best log prob of any hypothesis
+                    # See if we have finished by generating any of the valid right symbols
+                    # These were organized to be at the end of the list of search_symbols
+                    if i >= index_first_end_symbol:
+                        # NOTE: we don't add the ending symbol to the finished hypothesis
+                        if hypo[STR] in finished_hypos:
+                            # If already had this word finish with a different end symbol we sum the probabilities
+                            finished_hypos[hypo[STR]] = np.logaddexp(finished_hypos[hypo[STR]], new_log_prob)
+                        else:
+                            # Haven't seen this word, we will just always add it to the dictionary
+                            # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
+                            finished_hypos[hypo[STR]] = new_log_prob
+                        # See if we need to update the current best log prob of any finishing hypothesis
                         if new_log_prob > best_finished_log_prob:
                             best_finished_log_prob = new_log_prob
+                    # This hypothesis didn't finish
                     # Keep if it is still within beam width of our best hypothesis thus far
-                    # But if the n-best list is fully populated then we must beat the current worst hypothesis on the heap (first element)
-                    elif (best_finished_log_prob - new_log_prob) < beam and \
-                            (not nbest or len(finished_hypos) < nbest or new_log_prob > finished_hypos[0][LOGP]):
-                        # Now that we know we are keeping it, we'll make a copy of the KenLM state object
-                        next_hypos.append((new_log_prob, new_str, temp_out_state.__copy__()))
+                    elif (best_finished_log_prob - new_log_prob) < beam:
+                        # This hypothesis is within the beam of the best to date
+                        # We'll make a copy of the KenLM state object and extend the string
+                        next_hypos.append((new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
+
             # Swap in the next hypotheses for the current so the outer loop keeps going
             current_hypos = next_hypos
+            # Sort it so we explore from most probable to least
+            current_hypos.sort(key=lambda x: x[LOGP], reverse=True)
 
-        # Reverse the order to get the most probable first
-        finished_hypos.sort(key=lambda x: x[LOGP], reverse=True)
-
-        # Remove the right context from the results and add any prefix to the front
+        # Convert our dictionary of finished hypotheses to a sorted list
+        sorted_best = sorted(finished_hypos.items(), key=lambda item: item[1], reverse=True)[:nbest]
         result = []
-        for hypo in finished_hypos:
-            # Optional return of log probs in our result list
+        for hypo in sorted_best:
+            full_word = word_prefix + hypo[0]
             if return_log_probs:
-                result.append((word_prefix + hypo[STR].removesuffix(right_context), hypo[LOGP]))
+                result.append((full_word, hypo[1]))
             else:
-                result.append(word_prefix + hypo[STR].removesuffix(right_context))
-
+                result.append(full_word)
         return result
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
@@ -165,8 +187,10 @@ class NGramLanguageModel(LanguageModel):
         # Do not modify the original parameter, could affect mixture model
         context = evidence.copy()
 
-        if len(context) > 11:
-            context = context[-11:]
+        # Limit context based on the context length of the n-gram model
+        # This saves doing extra work that won't matter
+        if len(context) >= self.model.order:
+            context = context[-(self.model.order-1):]
 
         evidence_str = ''.join(context).lower()
 
