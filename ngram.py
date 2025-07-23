@@ -13,20 +13,28 @@ class NGramLanguageModel(LanguageModel):
     def __init__(self,
                  symbol_set: List[str],
                  lm_path: str,
-                 skip_symbol_norm: Optional[bool] = False):
-
+                 skip_symbol_norm: Optional[bool] = False,
+                 space_symbol: str = "<sp>"):
+        """
+        Construct an instance of NGramLanguageModel.
+        :param symbol_set: symbols we want to make predictions over
+        :param lm_path: location of the KenLM format n-gram language model
+        :param skip_symbol_norm: don't normalize character prediction distribution to just symbol_set
+        :param space_symbol: specifies pseudo-word used for spaces between words
+        """
         super().__init__(symbol_set=symbol_set)
         print(f"Creating n-gram language model, lm_path = {lm_path}")
         self.model = None
         self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
+        self.space_symbol = space_symbol
 
         # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
         self.symbol_set_converted = []
         for symbol in symbol_set:
             if symbol == " ":
-                self.symbol_set_converted.append("<sp>")
+                self.symbol_set_converted.append(self.space_symbol)
             else:
                 self.symbol_set_converted.append(symbol)
 
@@ -38,7 +46,7 @@ class NGramLanguageModel(LanguageModel):
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
-        Left and right context use normal space character for any spaces, we convert internally to <sp>
+        Left and right context use normal space character for any spaces, we convert internally to space symbol, e.g. <sp>
         :param left_context: previous text we are condition on
         :param right_context: characters that must appear right of our predicted next word
         :param nbest: number of most likely words to return
@@ -60,7 +68,7 @@ class NGramLanguageModel(LanguageModel):
         for i in range(len(truncated_left_context)):
             ch = truncated_left_context[i]
             if ch == " ":
-                ch = "<sp>"
+                ch = self.space_symbol
             if i % 2 == 0:
                 self.model.BaseScore(state1, ch, state2)
             else:
@@ -161,7 +169,7 @@ class NGramLanguageModel(LanguageModel):
 
         for i, ch in enumerate(context):
             if ch == SPACE_CHAR:
-                context[i] = "<sp>"
+                context[i] = self.space_symbol
 
         self.model.BeginSentenceWrite(self.state)
 
@@ -232,9 +240,9 @@ class NGramLanguageModel(LanguageModel):
             if char == BACKSPACE_CHAR:
                 next
 
-            # Replace the space character with KenLM's <sp> token
+            # Replace the space character to whatever symbol is used in the n-gram model, e.g. "<sp>"
             if char == SPACE_CHAR:
-                score = self.model.BaseScore(state, '<sp>', temp_state)
+                score = self.model.BaseScore(state, self.space_symbol, temp_state)
             else:
                 score = self.model.BaseScore(state, char.lower(), temp_state)
 
