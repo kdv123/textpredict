@@ -177,13 +177,14 @@ if __name__ == "__main__":
                     j += 1
             else:
                 print(f" TYPED: '{phrase[j]}'")
-
+            sys.stdout.flush()
             j += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
         ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+        sys.stdout.flush()
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
