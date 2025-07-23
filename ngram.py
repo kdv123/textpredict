@@ -14,13 +14,15 @@ class NGramLanguageModel(LanguageModel):
                  symbol_set: List[str],
                  lm_path: str,
                  skip_symbol_norm: Optional[bool] = False,
-                 space_symbol: str = "<sp>"):
+                 space_symbol: str = "<sp>",
+                 sentence_end: str = "</s>"):
         """
         Construct an instance of NGramLanguageModel.
         :param symbol_set: symbols we want to make predictions over
         :param lm_path: location of the KenLM format n-gram language model
         :param skip_symbol_norm: don't normalize character prediction distribution to just symbol_set
-        :param space_symbol: specifies pseudo-word used for spaces between words
+        :param space_symbol: pseudo-word for spaces between words
+        :param sentence_end: pseudo-word for end of sentence event
         """
         super().__init__(symbol_set=symbol_set)
         print(f"Creating n-gram language model, lm_path = {lm_path}")
@@ -29,6 +31,7 @@ class NGramLanguageModel(LanguageModel):
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
         self.space_symbol = space_symbol
+        self.sentence_end = sentence_end
 
         # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
         self.symbol_set_converted = []
@@ -111,7 +114,7 @@ class NGramLanguageModel(LanguageModel):
                 # Extend this hypothesis by all possible symbols
                 for j in range(len(self.symbol_set)):
                     # Compute the new log prob and string for our candidate new hypothesis
-                    # NOTE: We convert normal character to any special version in the LM, e.g. " " -> "<sp>"
+                    # NOTE: We convert normal characters to any special version in the LM, e.g. " " -> "<sp>"
                     new_log_prob = hypo[LOGP] + self.model.BaseScore(hypo[STATE], self.symbol_set_converted[j], temp_out_state)
                     new_str = hypo[STR] + self.symbol_set[j]
 
@@ -237,23 +240,21 @@ class NGramLanguageModel(LanguageModel):
 
         for char in self.symbol_set:
             # Backspace probability under the LM is 0
-            if char == BACKSPACE_CHAR:
-                next
+            if char != BACKSPACE_CHAR:
+                # Replace the space character to whatever symbol is used in the n-gram model, e.g. "<sp>"
+                if char == SPACE_CHAR:
+                    score = self.model.BaseScore(state, self.space_symbol, temp_state)
+                else:
+                    score = self.model.BaseScore(state, char.lower(), temp_state)
 
-            # Replace the space character to whatever symbol is used in the n-gram model, e.g. "<sp>"
-            if char == SPACE_CHAR:
-                score = self.model.BaseScore(state, self.space_symbol, temp_state)
-            else:
-                score = self.model.BaseScore(state, char.lower(), temp_state)
-
-            # BaseScore returns log probs, convert by putting 10 to its power
-            next_char_pred[char] = pow(10, score)
+                # BaseScore returns log probs, convert by putting 10 to its power
+                next_char_pred[char] = pow(10, score)
 
         # We can optionally disable normalization over our symbol set
         # This is useful if we want to compare against SRILM with a LM with a larger vocab
         if not self.skip_symbol_norm:
-            sum = np.sum(list(next_char_pred.values()))
+            sum_probs = np.sum(list(next_char_pred.values()))
             for char in self.symbol_set:
-                next_char_pred[char] /= sum
+                next_char_pred[char] /= sum_probs
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
