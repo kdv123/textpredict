@@ -12,7 +12,7 @@ from scipy.special import softmax
 import time
 from collections import defaultdict
 from typing import Final
-from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
+#from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
 
 class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal model, GPT-2 by default."""
@@ -437,32 +437,20 @@ class CausalLanguageModel(LanguageModel):
                       evidence: List[str],
                       nbest,
                       beam,
-                      max_new_tokens: int = 20,
-                      max_completed: int = 32000) -> List[Tuple]:
+                      max_new_tokens: int = 5,
+                      max_completed: int = 32) -> List[Tuple]:
         """
         Predict top likely next words using beam search.
-        
-        Args:
-            evidence: List of characters typed so far.
-            nbest: Number of best hypotheses (words) to return.
-            beam: Beam width for the search.
-            max_new_tokens: Maximum number of tokens to generate per hypothesis.
-            max_completed: Maximum number of completed hypotheses to track.
-        
-        Returns:
-            List of predicted next words sorted by probability.
         """
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
 
         self.beam_width = beam
-        # Margin for pruning based on log-prob 
-        self.prune_margin = 5.0  
+        self.prune_margin = 5  # Add margin for pruning
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
-        # Combine evidence into context string
         context = converted_context.replace(SPACE_CHAR, ' ')
-        # Handle simple casing rules explicitly (e.g., "i" -> "I")
+
         if self.case_simple and len(context) > 0:
             cased_context = ""
             words = context.split()
@@ -481,7 +469,7 @@ class CausalLanguageModel(LanguageModel):
         context_lower = context.lower()
         pos = context_lower.rfind(" ")
         tokens = list(self.left_context_tokens)
-        # Determine the prefix of the current word to complete
+
         if pos >= 0:
             if self.mixed_case_context:
                 word_prefix = context[pos+1:]
@@ -493,6 +481,19 @@ class CausalLanguageModel(LanguageModel):
             word_prefix = context if self.mixed_case_context else context_lower
             tokens.extend(self._encode('' if self.mixed_case_context else ''))
 
+
+        if word_prefix == "":
+            valid_tokens = list(range(self.tokenizer.vocab_size))
+        else:
+            valid_tokens = []
+            for token_id in range(self.tokenizer.vocab_size):
+                token_str = self.tokenizer.convert_ids_to_tokens([token_id])[0]
+                clean_token_str = token_str.lstrip('Ġ').lstrip()
+
+                if clean_token_str.startswith(word_prefix) and (
+                    token_str.startswith("Ġ") or token_str.startswith(" ")
+                ):
+                    valid_tokens.append(token_id)
         LOGP, SEQ = 0, 1
         current_hypos = [(0.0, tokens)]
         completed_words_dict = {}
@@ -500,7 +501,10 @@ class CausalLanguageModel(LanguageModel):
         done = False
         completed = 0
         batch_size = 32
-        # Beam search loop
+        tokens_generated=0
+        MAX_TOKEN_PER_WORD = 20  
+
+
         while len(current_hypos) > 0 and not done:
             current_hypos.sort(reverse=True)
             add_logps = [x[LOGP] for x in current_hypos]
@@ -508,103 +512,122 @@ class CausalLanguageModel(LanguageModel):
 
             all_new_log_probs = []
             all_sorted_args = []
-            # Mini-batching to avoid GPU out-of-memory issues
+
             for i in range(0, len(current_hypos), batch_size):
                 batch_seqs = seqs[i:i + batch_size]
                 batch_logps = add_logps[i:i + batch_size]
 
                 tokens_tensor = torch.tensor(batch_seqs).to(self.device)
-                # Perform inference on current batch
                 before_inference_ns = time.time_ns()
                 with torch.no_grad():
-                    logits = self.model(tokens_tensor).logits[:, -1, :]
-                    log_probs = torch.log_softmax(logits, dim=1)
-                    add_tensor = torch.tensor(batch_logps).reshape(-1, 1).to(self.device)
-                    new_log_probs = log_probs + add_tensor
+                    # Compute the probabilities from the logits
+                    log_probs = torch.log_softmax(self.model(tokens_tensor).logits[:, -1, :], dim=1)
+
+                    # Create a column vector where each row is that hypothesis' current likelihood.
+                    add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape(-1, 1).to(self.device)
+
+                    # Add the current likelihoods with each subtoken's probability.
+                    new_log_probs = torch.add(log_probs, add_tensor)
+
+                    # Use the GPU to sort the tokens by probability, this allows use to do better max completed pruning in the search.
+                    # Move both back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
+                    sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach()
+                    new_log_probs = new_log_probs.detach()
+                    if tokens_generated == 0:
+                        if word_prefix == "":
+                            topk_log_probs, topk_indices = torch.topk(new_log_probs, 50, dim=1, largest=True, sorted=True)
+                        else:
+                            topk_log_probs = new_log_probs
+                            topk_indices = torch.argsort(new_log_probs, descending=True, dim=1)
+                    else:
+                        topk_log_probs, topk_indices = torch.topk(new_log_probs, 50, dim=1, largest=True, sorted=True)
 
                 self.predict_inference_ns += time.time_ns() - before_inference_ns
 
-                all_new_log_probs.append(new_log_probs.cpu().numpy())
-                all_sorted_args.append(torch.argsort(new_log_probs, descending=True, dim=1).cpu().numpy())
+                all_new_log_probs.append(topk_log_probs.cpu().numpy())
+                all_sorted_args.append(topk_indices.cpu().numpy())
 
             new_log_probs = np.vstack(all_new_log_probs)
             sorted_args = np.vstack(all_sorted_args)
 
             next_hypos = []
-            # Iterate over current hypotheses to generate next tokens
+
             for current_index, current in enumerate(current_hypos):
-                tokens_generated = len(current[SEQ]) - len(self.left_context_tokens)
                 if tokens_generated >= max_new_tokens:
                     continue
 
-                find_word = False
-                for token_id in sorted_args[current_index]:
-                    if not find_word:
-                        new_seq = current[SEQ] + [token_id]
-                        new_logp = new_log_probs[current_index][token_id]
+                for token_index, token_id in enumerate(sorted_args[current_index]):
 
-                        decoded = self.tokenizer.decode(new_seq, skip_special_tokens=True)
-                        suffix = decoded[len(context_lower[:pos+1]):]
+                    if tokens_generated == 0 and token_id not in valid_tokens:
+                        continue
+                    new_seq = current[SEQ] + [token_id]
+                    raw_logp = new_log_probs[current_index][token_index]
 
-                        if not suffix.startswith(word_prefix):
-                            continue
-                        # Check if word is completed
-                        if ' ' in suffix or len(new_seq) - len(current[SEQ]) >= max_new_tokens:
-                            word = suffix.split(' ')[0].strip().lower()
-                             # Aggregate duplicate words using logsumexp
-                            if word in completed_words_dict:
-                                prev_logp, prev_encoded = completed_words_dict[word]
-                                combined_logp = np.logaddexp(prev_logp, new_logp)
-                                completed_words_dict[word] = (combined_logp, prev_encoded)
-                            else:
-                                encoded = self._encode(word)
-                                completed_words_dict[word] = (new_logp, encoded)
-                            # Update best completed hypothesis log-probability
-                            if best_completed_logp is None or new_logp > best_completed_logp:
-                                best_completed_logp = new_logp
+                    suffix = self.tokenizer.decode([x for x in new_seq if x not in tokens], skip_special_tokens=True)
+                    if suffix.startswith(' '):
+                      suffix = suffix[1:]
 
-                            completed += 1
-                            find_word = True
-                            # Stop if max completed hypotheses reached
-                            if self.max_completed and completed >= self.max_completed:
+                    if not suffix.startswith(word_prefix):
+                        continue
+
+                    token_len_in_word = len(new_seq) - len(tokens)
+                    if token_len_in_word > MAX_TOKEN_PER_WORD:
+                        continue
+
+                    if ' ' in suffix or token_len_in_word >= max_new_tokens:
+                        word = suffix.split(' ')[0].strip().lower()
+                        if word in completed_words_dict:
+
+                            prev_logp, prev_encoded, prev_count = completed_words_dict[word]
+                            combined_logp = np.logaddexp(prev_logp, raw_logp)
+                            completed_words_dict[word] = (combined_logp, prev_encoded, prev_count+1)
+                        else:
+                            encoded = self._encode(word)
+                            completed_words_dict[word] = (raw_logp, encoded,1)
+
+                        if best_completed_logp is None or raw_logp > best_completed_logp:
+                                best_completed_logp = raw_logp
+
+                        completed += 1
+                        find_word = True
+
+                        if self.max_completed and completed >= self.max_completed:
                                 done = True
                                 break
 
-                        else:
-                            # Prune hypotheses explicitly based on log-prob threshold relative to best completion
-                            if best_completed_logp is not None and new_logp < best_completed_logp - self.prune_margin:
+                    else:
+                            if best_completed_logp is not None and raw_logp < best_completed_logp - self.prune_margin:
                                 continue
-                            # Add hypothesis to beam
+
                             if not self.beam_width or len(next_hypos) < self.beam_width:
-                                heapq.heappush(next_hypos, (new_logp, new_seq))
-                            elif new_logp > next_hypos[0][LOGP]:
-                                heapq.heappushpop(next_hypos, (new_logp, new_seq))
+                                heapq.heappush(next_hypos, (raw_logp, new_seq))
+                            elif raw_logp > next_hypos[0][LOGP]:
+                                heapq.heappushpop(next_hypos, (raw_logp, new_seq))
 
                 if self.max_completed and completed >= self.max_completed:
                     done = True
                     break
 
+            tokens_generated += 1
             current_hypos = next_hypos
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
-        # Sort and return top N predicted words
+
         completed_words = list(completed_words_dict.values())
         completed_words.sort(reverse=True)
         results = []
         seen_words = set()
 
-        for logp, seq in completed_words:
+        for logp, seq, count in completed_words:
             word = self.tokenizer.decode(seq, skip_special_tokens=True)
             if word and word not in seen_words:
                 seen_words.add(word)
                 results.append(word)
             if len(results) >= nbest:
                 break
-
         return results
 
-    
 
 
     def dump_predict_times(self) -> None:
@@ -639,11 +662,6 @@ class CausalLanguageModel(LanguageModel):
         tokenizer_vocab_size = self.tokenizer.vocab_size
         model_vocab_size = self.model.config.vocab_size
 
-        if tokenizer_vocab_size < model_vocab_size:
-            num_missing = model_vocab_size - tokenizer_vocab_size
-            extra_tokens = [f"<extra_id_{i}>" for i in range(num_missing)]
-            self.tokenizer.add_special_tokens({"additional_special_tokens": extra_tokens})
-            self.model.resize_token_embeddings(len(self.tokenizer))
 #        if self.lora:
 #            try:
 #                config = PeftConfig.from_pretrained(self.lora_path)
@@ -693,3 +711,5 @@ class CausalLanguageModel(LanguageModel):
         next_char_pred = self.predict(evidence)
 
         return next_char_pred
+
+
