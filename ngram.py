@@ -5,6 +5,7 @@ from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
+import heapq
 
 class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
@@ -44,7 +45,8 @@ class NGramLanguageModel(LanguageModel):
                       left_context: str,
                       word_end_symbols: List[str] = None,
                       nbest: int = None,
-                      beam: float = 3.0,
+                      beam_logp_best: float = 4.0,
+                      beam_search_max: int = 200,
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
@@ -52,7 +54,8 @@ class NGramLanguageModel(LanguageModel):
         :param left_context: previous text we are condition on
         :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
         :param nbest: number of most likely words to return
-        :param beam: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_search_max: maximum number of hypotheses to track during each extension of search
         :param return_log_probs: whether to return log probabilities of each word
         :return: List of tuples with words and their log probabilities
         """
@@ -126,7 +129,10 @@ class NGramLanguageModel(LanguageModel):
         finished_hypos = {}
         best_finished_log_prob = float("-inf")
 
+        # Note: Python's heap pops minimum value, so we are going to explore worst first.
+        # Might be better to explore best first, but this is in conflict with the need to easily replace the worst hypothesis.
         while len(current_hypos) > 0:
+            # We'll store extended hypotheses in a min heap to make it easy to main only a fixed number of the best
             next_hypos = []
 
             for hypo in current_hypos:
@@ -137,42 +143,42 @@ class NGramLanguageModel(LanguageModel):
                     # NOTE: We convert normal characters to any special version in the LM, e.g. " " -> "<sp>"
                     new_log_prob = hypo[LOGP] + self.model.BaseScore(hypo[STATE], search_symbols_converted[i], temp_out_state)
 
-                    # See if we have finished by generating any of the valid right symbols
-                    # These were organized to be at the end of the list of search_symbols
-                    if i >= index_first_end_symbol:
-                        # NOTE: we don't add the ending symbol to the finished hypothesis
-                        if hypo[STR] in finished_hypos:
-                            # If already had this word finish with a different end symbol we sum the probabilities
-                            finished_hypos[hypo[STR]] = np.logaddexp(finished_hypos[hypo[STR]], new_log_prob)
+                    # We avoid adding finished or intermediate hypotheses if they are outside log prob beam
+                    # This is a bit faster than only doing it for intermediate hypotheses
+                    if (best_finished_log_prob - new_log_prob) < beam_logp_best:
+                        # See if we have finished by generating any of the valid right symbols
+                        # These were organized to be at the end of the list of search_symbols
+                        if i >= index_first_end_symbol:
+                            # NOTE: we don't add the ending symbol to the finished hypothesis
+                            if hypo[STR] in finished_hypos:
+                                # If already had this word finish with a different end symbol we sum the probabilities
+                                finished_hypos[hypo[STR]] = np.logaddexp(finished_hypos[hypo[STR]], new_log_prob)
+                            else:
+                                # Haven't seen this word, we will just always add it to the dictionary
+                                # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
+                                finished_hypos[hypo[STR]] = new_log_prob
+                            # Update the current best log prob of any finishing hypothesis
+                            best_finished_log_prob = max(best_finished_log_prob, new_log_prob)
+                        # This hypothesis didn't finish
+                        # Keep if it is still within beam width of our best hypothesis thus far
                         else:
-                            # Haven't seen this word, we will just always add it to the dictionary
-                            # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
-                            finished_hypos[hypo[STR]] = new_log_prob
-                        # See if we need to update the current best log prob of any finishing hypothesis
-                        if new_log_prob > best_finished_log_prob:
-                            best_finished_log_prob = new_log_prob
-                    # This hypothesis didn't finish
-                    # Keep if it is still within beam width of our best hypothesis thus far
-                    elif (best_finished_log_prob - new_log_prob) < beam:
-                        # This hypothesis is within the beam of the best to date
-                        # We'll make a copy of the KenLM state object and extend the string
-                        next_hypos.append((new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
-
-            # Swap in the next hypotheses for the current so the outer loop keeps going
+                            # This hypothesis is within the beam of the best to date
+                            # We'll make a copy of the KenLM state object and extend the string
+                            if len(next_hypos) < beam_search_max:
+                                # Add if we haven't reached our beam width limit so add
+                                heapq.heappush(next_hypos, (new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
+                            else:
+                                # Or replace the worst hypotheses with the new one
+                                heapq.heappushpop(next_hypos, (new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
+            # This slows it down for no improvement in KS
+#            next_hypos.sort(key=lambda x: x[LOGP], reverse=True)
             current_hypos = next_hypos
-            # Sort it so we explore from most probable to least
-            current_hypos.sort(key=lambda x: x[LOGP], reverse=True)
 
         # Convert our dictionary of finished hypotheses to a sorted list
         sorted_best = sorted(finished_hypos.items(), key=lambda item: item[1], reverse=True)[:nbest]
-        result = []
-        for hypo in sorted_best:
-            full_word = word_prefix + hypo[0]
-            if return_log_probs:
-                result.append((full_word, hypo[1]))
-            else:
-                result.append(full_word)
-        return result
+
+        # Optional inclusion of log prob in result
+        return [(word_prefix + hypo[0], hypo[1]) if return_log_probs else word_prefix + hypo[0] for hypo in sorted_best]
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """

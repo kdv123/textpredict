@@ -22,7 +22,8 @@ if __name__ == "__main__":
     parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
     parser.add_argument("--strip", action="store_true", help="Strip symbols except apostrophe")
     parser.add_argument("--nbest", type=int, help="N-best list size", default=3)
-    parser.add_argument("--beam", type=float, help="Beam for search, log-prob", default=3.0)
+    parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis", default=4.0)
+    parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search", default=100)
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--model-name", help="Model name of LLM")
@@ -154,7 +155,10 @@ if __name__ == "__main__":
             nbest = args.nbest
             if use_literal:
                 nbest -= 1
-            words = lm.predict_words(left_context, nbest=nbest, beam=args.beam, word_end_symbols=args.word_end_symbols)
+            words = lm.predict_words(left_context, nbest=nbest,
+                                     beam_logp_best=args.beam,
+                                     beam_search_max=args.beam_max,
+                                     word_end_symbols=args.word_end_symbols)
             # Add the literal text type as the final slot
             if use_literal:
                 words.append(left_context)
