@@ -13,6 +13,7 @@ from socket import gethostname
 import re
 import sys
 from datasets import load_dataset
+import os
 
 if __name__ == "__main__":
 
@@ -42,6 +43,8 @@ if __name__ == "__main__":
     parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
+    parser.add_argument("--out-stats", help="Output summary stats to this tab delimited file")
+    parser.add_argument("--out-extra", action="append", dest="out_extra_cols", help="Output additional column to stats file, format: COLUMN_NAME,VALUE")
 
     args = parser.parse_args()
 
@@ -61,6 +64,13 @@ if __name__ == "__main__":
     if (args.dataset_limit_col and not args.dataset_limit_val) or (args.dataset_limit_val and not args.dataset_limit_col):
         print(f"ERROR: Must specify both --dataset-limit-col and --dataset-limit-val")
         sys.exit(1)
+
+    if args.out_extra_cols:
+        for extra in args.out_extra_cols:
+            cols = extra.split(",")
+            if len(cols) != 2:
+                print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}")
+                sys.exit(1)
 
     # Handy stuff to print out in our log files
     print(f"START: {datetime.now()}")
@@ -224,8 +234,52 @@ if __name__ == "__main__":
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
+    total_time = timer() - start
+    secs_per_pred = (timer() - prediction_start) / total_predictions
+
     print(f"TRUNCATED: {total_truncated}")
     print(f"CHARS, KEYSTROKES, PHRASES: {total_chars} {total_keystrokes} {len(phrases)}")
-    print(f"TIME: {timer() - start:.2f}")
-    print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
+    print(f"TIME: {total_time:.2f}")
+    print(f"SECS/PRED: {secs_per_pred:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
+
+    # Optional output of a tab-delimited file for easy tracking of results over multiple experiments
+    if args.out_stats:
+        if not os.path.exists(args.out_stats):
+            # New file, write a header line
+            file = open(args.out_stats, "w")
+            file.write(f"final_ks"
+                       f"\tphrases"
+                       f"\ttotal_chars"
+                       f"\ttotal_keystrokes"
+                       f"\ttotal_time"
+                       f"\tsecs_per_pred"                       
+                       f"\tdate_time"
+                       f"\thostname"
+                       )
+            # Write any of the optional column names the client intends to log
+            if args.out_extra_cols:
+                for extra in args.out_extra_cols:
+                    extra_col_name = extra.split(",")[0]
+                    file.write(f"\t{extra_col_name}")
+            file.write("\n")
+        else:
+            file = open(args.out_stats, "a")
+
+        file.write(f"{final_ks:.6f}"
+                   f"\t{len(phrases)}"
+                   f"\t{total_chars}"
+                   f"\t{total_keystrokes}"
+                   f"\t{timer() - start:.2f}"
+                   f"\t{secs_per_pred:.6f}"                   
+                   f"\t{datetime.now()}"
+                   f"\t{gethostname()}"
+                   )
+        # Write any of the optional column values
+        if args.out_extra_cols:
+            for extra in args.out_extra_cols:
+                extra_col_val = extra.split(",")[1]
+                file.write(f"\t{extra_col_val}")
+        file.write("\n")
+
+        file.close()
