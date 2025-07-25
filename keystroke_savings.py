@@ -10,10 +10,10 @@ from timeit import default_timer as timer
 import argparse
 from datetime import datetime
 from socket import gethostname
-import re
 import sys
 import os
 import eval_helper
+import fcntl
 
 if __name__ == "__main__":
 
@@ -236,6 +236,8 @@ if __name__ == "__main__":
         if not os.path.exists(args.out_stats):
             # New file, write a header line
             file = open(args.out_stats, "w")
+            # We may run this script in parallel so try and prevent writing to the stats file at the same time
+            fcntl.flock(file, fcntl.LOCK_EX)
             file.write(f"final_ks"
                        f"\tphrases"
                        f"\ttotal_words"
@@ -254,6 +256,7 @@ if __name__ == "__main__":
             file.write("\n")
         else:
             file = open(args.out_stats, "a")
+            fcntl.flock(file, fcntl.LOCK_EX)
 
         file.write(f"{final_ks:.6f}"
                    f"\t{len(phrases)}"
@@ -271,5 +274,5 @@ if __name__ == "__main__":
                 extra_col_val = extra.split(",")[1]
                 file.write(f"\t{extra_col_val}")
         file.write("\n")
-
+        fcntl.flock(file, fcntl.LOCK_UN)
         file.close()
