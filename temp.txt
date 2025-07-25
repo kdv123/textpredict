@@ -1,0 +1,1533 @@
+WARNING: detected OPT or Llama model, recommend settings --drop-first-token
+28 valid symbols: abcdefghijklmnopqrstuvwxyz' 
+Dropped 50 words
+Computing cache for 99946 words...
+Language model vocab size: 50265
+Valid subwords 72125, dropped 3359
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix th
+START with 98
+LOOP top: current 98
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140813
+longer first (the)
+longer middle (th)( clamp)
+longer last (th)( strutconnector)
+prefix the
+START with 27
+LOOP top: current 27
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140742
+longer first (there)
+longer middle (the)( desperation)
+longer last (the)( strutconnector)
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix to
+START with 56
+LOOP top: current 56
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140771
+longer first (ton)
+longer middle (to)(char)
+longer last (to)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix an
+START with 239
+LOOP top: current 239
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140954
+longer first (and)
+longer middle (an)( teddy)
+longer last (an)( strutconnector)
+prefix and
+START with 35
+LOOP top: current 35
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140750
+longer first (anda)
+longer middle (and)( pb)
+longer last (and)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix o
+START with 1199
+LOOP top: current 1199
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95009
+longer first (on)
+longer middle (o)(generic)
+longer last (o)( strutconnector)
+prefix of
+START with 25
+LOOP top: current 25
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140740
+longer first (off)
+longer middle (of)( commuter)
+longer last (of)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix in
+START with 290
+LOOP top: current 290
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 141005
+longer first (ing)
+longer middle (in)(idates)
+longer last (in)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix is
+START with 156
+LOOP top: current 156
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140871
+longer first (ist)
+longer middle (is)( tsa)
+longer last (is)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix it
+START with 156
+LOOP top: current 156
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140871
+longer first (ite)
+longer middle (it)( tsa)
+longer last (it)( strutconnector)
+prefix y
+START with 122
+LOOP top: current 122
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93932
+longer first (year)
+longer middle (y)(spaceengineers)
+longer last (y)( strutconnector)
+prefix yo
+START with 16
+LOOP top: current 16
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93826
+longer first (you)
+longer middle (yo)( fixme)
+longer last (yo)( strutconnector)
+prefix you
+START with 11
+LOOP top: current 11
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140726
+longer first (your)
+longer middle (you)( compost)
+longer last (you)( strutconnector)
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix th
+START with 98
+LOOP top: current 98
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140813
+longer first (the)
+longer middle (th)( clamp)
+longer last (th)( strutconnector)
+prefix tha
+START with 10
+LOOP top: current 10
+LOOP done, 46906
+LOOP top: current 46906
+LOOP done, 0
+longer 46915
+longer first (that)
+longer middle (tha)( congratulations)
+longer last (tha)( strutconnector)
+prefix that
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (that)( the)
+longer middle (that)( the)
+longer last (that)( strutconnector)
+prefix f
+START with 463
+LOOP top: current 463
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94273
+longer first (field)
+longer middle (f)( module)
+longer last (f)( strutconnector)
+prefix fo
+START with 91
+LOOP top: current 91
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93901
+longer first (ford)
+longer middle (fo)( sqor)
+longer last (fo)( strutconnector)
+prefix for
+START with 51
+LOOP top: current 51
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140766
+longer first (ford)
+longer middle (for)(street)
+longer last (for)( strutconnector)
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix th
+START with 98
+LOOP top: current 98
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140813
+longer first (the)
+longer middle (th)( clamp)
+longer last (th)( strutconnector)
+prefix thi
+START with 18
+LOOP top: current 18
+LOOP done, 0
+longer 18
+longer first (this)
+longer middle (thin)
+longer last (thinkable)
+prefix this
+START with 3
+LOOP top: current 3
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140718
+longer first (this)( the)
+longer middle (this)(enger)
+longer last (this)( strutconnector)
+prefix o
+START with 1199
+LOOP top: current 1199
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95009
+longer first (on)
+longer middle (o)(generic)
+longer last (o)( strutconnector)
+prefix on
+START with 92
+LOOP top: current 92
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140807
+longer first (one)
+longer middle (on)( transparency)
+longer last (on)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wa
+START with 76
+LOOP top: current 76
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140791
+longer first (way)
+longer middle (wa)( twelve)
+longer last (wa)( strutconnector)
+prefix was
+START with 8
+LOOP top: current 8
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93818
+longer first (washington)
+longer middle (was)( entityitem)
+longer last (was)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wi
+START with 68
+LOOP top: current 68
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140783
+longer first (with)
+longer middle (wi)( haf)
+longer last (wi)( strutconnector)
+prefix wit
+START with 12
+LOOP top: current 12
+LOOP done, 46906
+LOOP top: current 46906
+LOOP done, 0
+longer 46917
+longer first (with)
+longer middle (wit)( jewel)
+longer last (wit)( strutconnector)
+prefix with
+START with 8
+LOOP top: current 8
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93818
+longer first (without)
+longer middle (with)( entityitem)
+longer last (with)( strutconnector)
+prefix b
+START with 542
+LOOP top: current 542
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94352
+longer first (based)
+longer middle (b)(constructed)
+longer last (b)( strutconnector)
+prefix be
+START with 102
+LOOP top: current 102
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140817
+longer first (ber)
+longer middle (be)(onomous)
+longer last (be)( strutconnector)
+prefix h
+START with 408
+LOOP top: current 408
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94218
+longer first (he)
+longer middle (h)(efficients)
+longer last (h)( strutconnector)
+prefix ha
+START with 87
+LOOP top: current 87
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140802
+longer first (ham)
+longer middle (ha)( dress)
+longer last (ha)( strutconnector)
+prefix hav
+START with 5
+LOOP top: current 5
+LOOP done, 0
+longer 5
+longer first (have)
+longer middle (having)
+longer last (having)
+prefix have
+START with 3
+LOOP top: current 3
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93813
+longer first (haven)
+longer middle (have)( strutconnector)
+longer last (have)( strutconnector)
+prefix m
+START with 546
+LOOP top: current 546
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94356
+longer first (man)
+longer middle (m)(frameworks)
+longer last (m)( strutconnector)
+prefix my
+START with 6
+LOOP top: current 6
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140721
+longer first (mys)
+longer middle (my)( paycheck)
+longer last (my)( strutconnector)
+prefix n
+START with 298
+LOOP top: current 298
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94108
+longer first (ne)
+longer middle (n)( unnecess)
+longer last (n)( strutconnector)
+prefix no
+START with 55
+LOOP top: current 55
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140770
+longer first (not)
+longer middle (no)(adoes)
+longer last (no)( strutconnector)
+prefix not
+START with 16
+LOOP top: current 16
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140731
+longer first (nothing)
+longer middle (not)( impartial)
+longer last (not)( strutconnector)
+prefix b
+START with 542
+LOOP top: current 542
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94352
+longer first (based)
+longer middle (b)(constructed)
+longer last (b)( strutconnector)
+prefix bu
+START with 62
+LOOP top: current 62
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140777
+longer first (but)
+longer middle (bu)( seeing)
+longer last (bu)( strutconnector)
+prefix but
+START with 6
+LOOP top: current 6
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140721
+longer first (button)
+longer middle (but)( paycheck)
+longer last (but)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix ar
+START with 198
+LOOP top: current 198
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140913
+longer first (ard)
+longer middle (ar)( manor)
+longer last (ar)( strutconnector)
+prefix are
+START with 24
+LOOP top: current 24
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140739
+longer first (ares)
+longer middle (are)( commuter)
+longer last (are)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix as
+START with 142
+LOOP top: current 142
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140857
+longer first (ash)
+longer middle (as)( shutterstock)
+longer last (as)( strutconnector)
+prefix s
+START with 854
+LOOP top: current 854
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94664
+longer first (st)
+longer middle (s)( toget)
+longer last (s)( strutconnector)
+prefix so
+START with 64
+LOOP top: current 64
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140779
+longer first (son)
+longer middle (so)(let)
+longer last (so)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix we
+START with 47
+LOOP top: current 47
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140762
+longer first (well)
+longer middle (we)( depicts)
+longer last (we)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix if
+START with 57
+LOOP top: current 57
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140772
+longer first (ified)
+longer middle (if)(char)
+longer last (if)( strutconnector)
+prefix h
+START with 408
+LOOP top: current 408
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94218
+longer first (he)
+longer middle (h)(efficients)
+longer last (h)( strutconnector)
+prefix he
+START with 117
+LOOP top: current 117
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140832
+longer first (her)
+longer middle (he)( deposited)
+longer last (he)( strutconnector)
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix th
+START with 98
+LOOP top: current 98
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140813
+longer first (the)
+longer middle (th)( clamp)
+longer last (th)( strutconnector)
+prefix the
+START with 27
+LOOP top: current 27
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140742
+longer first (there)
+longer middle (the)( desperation)
+longer last (the)( strutconnector)
+prefix they
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (they)( the)
+longer middle (they)( the)
+longer last (they)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix at
+START with 185
+LOOP top: current 185
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140900
+longer first (ate)
+longer middle (at)( cause)
+longer last (at)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix al
+START with 142
+LOOP top: current 142
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140857
+longer first (all)
+longer middle (al)( shutterstock)
+longer last (al)( strutconnector)
+prefix all
+START with 27
+LOOP top: current 27
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140742
+longer first (ally)
+longer middle (all)( desperation)
+longer last (all)( strutconnector)
+prefix m
+START with 546
+LOOP top: current 546
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94356
+longer first (man)
+longer middle (m)(frameworks)
+longer last (m)( strutconnector)
+prefix me
+START with 96
+LOOP top: current 96
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140811
+longer first (ment)
+longer middle (me)( academic)
+longer last (me)( strutconnector)
+prefix y
+START with 122
+LOOP top: current 122
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93932
+longer first (year)
+longer middle (y)(spaceengineers)
+longer last (y)( strutconnector)
+prefix yo
+START with 16
+LOOP top: current 16
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93826
+longer first (you)
+longer middle (yo)( fixme)
+longer last (yo)( strutconnector)
+prefix you
+START with 11
+LOOP top: current 11
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140726
+longer first (your)
+longer middle (you)( compost)
+longer last (you)( strutconnector)
+prefix your
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (your)( the)
+longer middle (your)( the)
+longer last (your)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wi
+START with 68
+LOOP top: current 68
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140783
+longer first (with)
+longer middle (wi)( haf)
+longer last (wi)( strutconnector)
+prefix wil
+START with 8
+LOOP top: current 8
+LOOP done, 46906
+LOOP top: current 46906
+LOOP done, 0
+longer 46913
+longer first (will)
+longer middle (wil)( compost)
+longer last (wil)( strutconnector)
+prefix will
+START with 4
+LOOP top: current 4
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93814
+longer first (williams)
+longer middle (will)( strutconnector)
+longer last (will)( strutconnector)
+prefix o
+START with 1199
+LOOP top: current 1199
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95009
+longer first (on)
+longer middle (o)(generic)
+longer last (o)( strutconnector)
+prefix or
+START with 170
+LOOP top: current 170
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140885
+longer first (ors)
+longer middle (or)( affluent)
+longer last (or)( strutconnector)
+prefix c
+START with 865
+LOOP top: current 865
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94675
+longer first (com)
+longer middle (c)( pengu)
+longer last (c)( strutconnector)
+prefix ca
+START with 101
+LOOP top: current 101
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140816
+longer first (called)
+longer middle (ca)(cn)
+longer last (ca)( strutconnector)
+prefix can
+START with 10
+LOOP top: current 10
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140725
+longer first (canada)
+longer middle (can)( compost)
+longer last (can)( strutconnector)
+prefix j
+START with 148
+LOOP top: current 148
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93958
+longer first (ja)
+longer middle (j)( guiactiveun)
+longer last (j)( strutconnector)
+prefix ju
+START with 24
+LOOP top: current 24
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93834
+longer first (just)
+longer middle (ju)( srfattach)
+longer last (ju)( strutconnector)
+prefix jus
+START with 6
+LOOP top: current 6
+LOOP done, 0
+longer 6
+longer first (just)
+longer middle (justin)
+longer last (just)
+prefix just
+START with 6
+LOOP top: current 6
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140721
+longer first (justice)
+longer middle (just)( paycheck)
+longer last (just)( strutconnector)
+prefix f
+START with 463
+LOOP top: current 463
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94273
+longer first (field)
+longer middle (f)( module)
+longer last (f)( strutconnector)
+prefix fr
+START with 46
+LOOP top: current 46
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140761
+longer first (free)
+longer middle (fr)( depicts)
+longer last (fr)( strutconnector)
+prefix fro
+START with 5
+LOOP top: current 5
+LOOP done, 0
+longer 5
+longer first (from)
+longer middle (front)
+longer last (frog)
+prefix from
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (from)( the)
+longer middle (from)( the)
+longer last (from)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wh
+START with 37
+LOOP top: current 37
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140752
+longer first (when)
+longer middle (wh)( desmond)
+longer last (wh)( strutconnector)
+prefix wha
+START with 5
+LOOP top: current 5
+LOOP done, 0
+longer 5
+longer first (what)
+longer middle (whatever)
+longer last (what)
+prefix what
+START with 5
+LOOP top: current 5
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140720
+longer first (whatever)
+longer middle (what)( anonymous)
+longer last (what)( strutconnector)
+prefix d
+START with 426
+LOOP top: current 426
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94236
+longer first (day)
+longer middle (d)( weap)
+longer last (d)( strutconnector)
+prefix do
+START with 62
+LOOP top: current 62
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140777
+longer first (down)
+longer middle (do)( seeing)
+longer last (do)( strutconnector)
+prefix o
+START with 1199
+LOOP top: current 1199
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95009
+longer first (on)
+longer middle (o)(generic)
+longer last (o)( strutconnector)
+prefix on
+START with 92
+LOOP top: current 92
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140807
+longer first (one)
+longer middle (on)( transparency)
+longer last (on)( strutconnector)
+prefix one
+START with 19
+LOOP top: current 19
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140734
+longer first (oney)
+longer middle (one)( kinda)
+longer last (one)( strutconnector)
+prefix l
+START with 497
+LOOP top: current 497
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94307
+longer first (ly)
+longer middle (l)(parser)
+longer last (l)( strutconnector)
+prefix li
+START with 121
+LOOP top: current 121
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140836
+longer first (ling)
+longer middle (li)( richer)
+longer last (li)( strutconnector)
+prefix lik
+START with 5
+LOOP top: current 5
+LOOP done, 46906
+LOOP top: current 46906
+LOOP done, 0
+longer 46910
+longer first (like)
+longer middle (lik)( paycheck)
+longer last (lik)( strutconnector)
+prefix like
+START with 4
+LOOP top: current 4
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93814
+longer first (likely)
+longer middle (like)( strutconnector)
+longer last (like)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix an
+START with 239
+LOOP top: current 239
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140954
+longer first (and)
+longer middle (an)( teddy)
+longer last (an)( strutconnector)
+prefix b
+START with 542
+LOOP top: current 542
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94352
+longer first (based)
+longer middle (b)(constructed)
+longer last (b)( strutconnector)
+prefix by
+START with 13
+LOOP top: current 13
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140728
+longer first (bys)
+longer middle (by)( congratulations)
+longer last (by)( strutconnector)
+prefix h
+START with 408
+LOOP top: current 408
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94218
+longer first (he)
+longer middle (h)(efficients)
+longer last (h)( strutconnector)
+prefix hi
+START with 45
+LOOP top: current 45
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140760
+longer first (high)
+longer middle (hi)( pred)
+longer last (hi)( strutconnector)
+prefix his
+START with 8
+LOOP top: current 8
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93818
+longer first (hist)
+longer middle (his)( entityitem)
+longer last (his)( strutconnector)
+prefix t
+START with 508
+LOOP top: current 508
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94318
+longer first (the)
+longer middle (t)( convol)
+longer last (t)( strutconnector)
+prefix th
+START with 98
+LOOP top: current 98
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140813
+longer first (the)
+longer middle (th)( clamp)
+longer last (th)( strutconnector)
+prefix the
+START with 27
+LOOP top: current 27
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140742
+longer first (there)
+longer middle (the)( desperation)
+longer last (the)( strutconnector)
+prefix ther
+START with 8
+LOOP top: current 8
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140723
+longer first (there)
+longer middle (ther)( admiration)
+longer last (ther)( strutconnector)
+prefix there
+START with 5
+LOOP top: current 5
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93815
+longer first (therefore)
+longer middle (there)(enginedebug)
+longer last (there)( strutconnector)
+prefix o
+START with 1199
+LOOP top: current 1199
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95009
+longer first (on)
+longer middle (o)(generic)
+longer last (o)( strutconnector)
+prefix ou
+START with 109
+LOOP top: current 109
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93919
+longer first (out)
+longer middle (ou)( gmaxwell)
+longer last (ou)( strutconnector)
+prefix out
+START with 19
+LOOP top: current 19
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140734
+longer first (outs)
+longer middle (out)( kinda)
+longer last (out)( strutconnector)
+prefix h
+START with 408
+LOOP top: current 408
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94218
+longer first (he)
+longer middle (h)(efficients)
+longer last (h)( strutconnector)
+prefix ha
+START with 87
+LOOP top: current 87
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140802
+longer first (ham)
+longer middle (ha)( dress)
+longer last (ha)( strutconnector)
+prefix had
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (had)( the)
+longer middle (had)( the)
+longer last (had)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wo
+START with 46
+LOOP top: current 46
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93856
+longer first (wood)
+longer middle (wo)(buyableinstoreandonline)
+longer last (wo)( strutconnector)
+prefix wou
+START with 2
+LOOP top: current 2
+LOOP done, 0
+longer 2
+longer first (would)
+longer middle (would)
+longer last (would)
+prefix woul
+START with 2
+LOOP top: current 2
+LOOP done, 0
+longer 2
+longer first (would)
+longer middle (would)
+longer last (would)
+prefix would
+START with 2
+LOOP top: current 2
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93812
+longer first (would)( the)
+longer middle (would)( the)
+longer last (would)( strutconnector)
+prefix u
+START with 698
+LOOP top: current 698
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94508
+longer first (up)
+longer middle (u)(accessory)
+longer last (u)( strutconnector)
+prefix up
+START with 27
+LOOP top: current 27
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140742
+longer first (ups)
+longer middle (up)( desperation)
+longer last (up)( strutconnector)
+prefix w
+START with 326
+LOOP top: current 326
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94136
+longer first (we)
+longer middle (w)(luaj)
+longer last (w)( strutconnector)
+prefix wh
+START with 37
+LOOP top: current 37
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140752
+longer first (when)
+longer middle (wh)( desmond)
+longer last (wh)( strutconnector)
+prefix whe
+START with 15
+LOOP top: current 15
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93825
+longer first (when)
+longer middle (whe)( fixme)
+longer last (whe)( strutconnector)
+prefix when
+START with 3
+LOOP top: current 3
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93813
+longer first (whenever)
+longer middle (when)( strutconnector)
+longer last (when)( strutconnector)
+prefix a
+START with 1850
+LOOP top: current 1850
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95660
+longer first (an)
+longer middle (a)(narr)
+longer last (a)( strutconnector)
+prefix ab
+START with 77
+LOOP top: current 77
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140792
+longer first (able)
+longer middle (ab)( twelve)
+longer last (ab)( strutconnector)
+prefix abo
+START with 10
+LOOP top: current 10
+LOOP done, 46906
+LOOP top: current 46906
+LOOP done, 0
+longer 46915
+longer first (about)
+longer middle (abo)( congratulations)
+longer last (abo)( strutconnector)
+prefix abou
+START with 3
+LOOP top: current 3
+LOOP done, 0
+longer 3
+longer first (about)
+longer middle (about)
+longer last (abouts)
+prefix about
+START with 3
+LOOP top: current 3
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 93813
+longer first (abouts)
+longer middle (about)( strutconnector)
+longer last (about)( strutconnector)
+prefix g
+START with 350
+LOOP top: current 350
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94160
+longer first (ge)
+longer middle (g)(chapter)
+longer last (g)( strutconnector)
+prefix ge
+START with 69
+LOOP top: current 69
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140784
+longer first (ger)
+longer middle (ge)( haf)
+longer last (ge)( strutconnector)
+prefix get
+START with 9
+LOOP top: current 9
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140724
+longer first (getty)
+longer middle (get)( admiration)
+longer last (get)( strutconnector)
+prefix n
+START with 298
+LOOP top: current 298
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 94108
+longer first (ne)
+longer middle (n)( unnecess)
+longer last (n)( strutconnector)
+prefix no
+START with 55
+LOOP top: current 55
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140770
+longer first (not)
+longer middle (no)(adoes)
+longer last (no)( strutconnector)
+prefix i
+START with 1601
+LOOP top: current 1601
+LOOP done, 93812
+LOOP top: current 93812
+LOOP done, 0
+longer 95411
+longer first (ing)
+longer middle (i)( subsections)
+longer last (i)( strutconnector)
+prefix it
+START with 156
+LOOP top: current 156
+LOOP done, 140718
+LOOP top: current 140718
+LOOP done, 0
+longer 140871
+longer first (ite)
+longer middle (it)( tsa)
+longer last (it)( strutconnector)
+prefix it'
+START with 0
+longer 0

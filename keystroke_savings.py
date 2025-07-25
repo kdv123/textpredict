@@ -12,8 +12,8 @@ from datetime import datetime
 from socket import gethostname
 import re
 import sys
-from datasets import load_dataset
 import os
+import eval_helper
 
 if __name__ == "__main__":
 
@@ -77,29 +77,16 @@ if __name__ == "__main__":
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
 
+    # Load the phrases we are going to simulate writing
     if args.phrases:
-        # Read in a plain text file that has a sentence on each line
-        phrase_file = open(args.phrases, "r")
-        phrases = phrase_file.readlines()
-        phrase_file.close()
+        phrases = eval_helper.load_phrases_plaintext(filename=args.phrases, phrase_limit=args.phrase_limit)
     elif args.dataset:
-        # Read the sentences from a Hugging Face dataset
-        dataset = load_dataset(path=args.dataset, split=args.dataset_split)
-        print(f"Loaded dataset {args.dataset}:\n{dataset}")
-        # Optional limiting to rows with a column matching a given value
-        if args.dataset_limit_col:
-            dataset = dataset.filter(
-                function=lambda example:
-                example[args.dataset_limit_col] == args.dataset_limit_val)
-            print(f"Filtered dataset to:\n{dataset}")
-        phrases = dataset[args.dataset_phrase_col]
-
-    # We may want to limit to only the first so many phrases
-    if args.phrase_limit:
-        print(f"Before limiting, number of phrases: {len(phrases)}")
-        while len(phrases) > args.phrase_limit:
-            phrases.pop()
-    print(f"Number phrases loaded: {len(phrases)}")
+        phrases = eval_helper.load_phrases_dataset(name=args.dataset,
+                                                   split=args.dataset_split,
+                                                   phrase_limit=args.phrase_limit,
+                                                   phrase_col=args.dataset_phrase_col,
+                                                   limit_col=args.dataset_limit_col,
+                                                   limit_val=args.dataset_limit_val)
 
     start = timer()
     symbols = list(args.symbols)
