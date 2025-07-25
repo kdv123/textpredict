@@ -80,7 +80,7 @@ if __name__ == "__main__":
         if args.dataset_limit_col:
             dataset = dataset.filter(
                 function=lambda example:
-                example[args.dataset_limit_col] == example[args.dataset_limit_val])
+                example[args.dataset_limit_col] == args.dataset_limit_val)
             print(f"Filtered dataset to:\n{dataset}")
         phrases = dataset[args.dataset_phrase_col]
 
