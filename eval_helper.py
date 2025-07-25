@@ -2,9 +2,10 @@
 
 from typing import List
 from datasets import load_dataset
+import re
 
 def load_phrases_plaintext(filename: str,
-                           phrase_limit: int = None) -> List:
+                           phrase_limit: int = None) -> List[str]:
     """
     Load phrases from a plaintext file with a phrase on each line
     :param filename: Filename containing the phrases
@@ -25,7 +26,7 @@ def load_phrases_dataset(name: str,
                          phrase_col: str = "text",
                          phrase_limit: int = None,
                          limit_col = None,
-                         limit_val = None) -> List:
+                         limit_val = None) -> List[str]:
     """
     Load phrases from a dataset
     :param name: Name of the dataset
@@ -48,3 +49,61 @@ def load_phrases_dataset(name: str,
     if phrase_limit:
         phrases = phrases[:phrase_limit]
     return phrases
+
+def filter_phrases(phrases: List[str],
+                   drop_numbers: bool = False,
+                   drop_max_len: int = None) -> List[str]:
+    """
+    Remove entire phrases based on different criteria
+    :param phrases: Original list of all the phrases
+    :param drop_numbers: Drop any phrase with a character 0-9
+    :param drop_max_len: Drop any phrase with more than this many characters
+    :return: List of phrases
+    """
+    result = []
+    for phrase in phrases:
+        if (not drop_max_len or len(phrase) <= drop_max_len) and \
+           (not drop_numbers or not re.search(r'\d', phrase)):
+           result.append(phrase)
+    return result
+
+def normalize_phrases(phrases: List[str],
+                      lower: bool = False,
+                      strip: bool = False,
+                      truncate_max_len: int = None) -> List[str]:
+    """
+    Perform text normalization on the phrases
+    :param phrases: Original list of all the phrases
+    :param lower: Lowercase all phrases
+    :param strip: Converts characters besides A-Z and apostrophe to space then collapses contiguous whitespace
+    :param truncate_max_len: Truncate any phrase with this many characters
+    :return: List of phrases
+    """
+    result = []
+    for phrase in phrases:
+        if lower:
+            phrase = phrase.lower()
+        # Drop words until we meet the truncation max length
+        if truncate_max_len and len(phrase) > truncate_max_len:
+            # First cut it off
+            phrase = phrase[:truncate_max_len]
+            # Then remove characters until we reach a space
+            while phrase[-1] != " ":
+                phrase = phrase[:-1]
+            phrase = phrase.strip()
+        if strip:
+            phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
+            phrase = re.sub(r'\s+', ' ', phrase).strip()
+        result.append(phrase)
+    return result
+
+def count_words(phrases: List[str]) -> int:
+    """
+    Count the number of words in a list of phrases
+    :param phrases: List of phrases
+    :return: Integer count
+    """
+    count = 0
+    for phrase in phrases:
+        count += len(phrase.split())
+    return count

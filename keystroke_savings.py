@@ -25,9 +25,12 @@ if __name__ == "__main__":
     parser.add_argument("--dataset-limit-col", type=str, help="Dataset column used to limit to subset of dataset")
     parser.add_argument("--dataset-limit-val", type=str, help="Value to match to include in phrases")
     parser.add_argument("--phrase-limit", type=int, help="Max phrases to evaluate")
-    parser.add_argument("--lm", type=str, help="Filename of n-gram model to load")
     parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
+    parser.add_argument("--drop-numbers", action="store_true", help="Drop phrases with numbers")
+    parser.add_argument("--drop-max-len", type=int, help="Drop phrases with more than this many characters")
     parser.add_argument("--strip", action="store_true", help="Strip symbols from phrases except apostrophe")
+    parser.add_argument("--truncate-max-len", type=int, help="Truncate phrases longer than this many characters")
+    parser.add_argument("--lm", type=str, help="Filename of n-gram model to load")
     parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
     parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis")
     parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
@@ -40,7 +43,6 @@ if __name__ == "__main__":
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
     parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
-    parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
     parser.add_argument("--out-stats", help="Output summary stats to this tab delimited file")
@@ -80,13 +82,30 @@ if __name__ == "__main__":
     # Load the phrases we are going to simulate writing
     if args.phrases:
         phrases = eval_helper.load_phrases_plaintext(filename=args.phrases, phrase_limit=args.phrase_limit)
-    elif args.dataset:
+    else:
         phrases = eval_helper.load_phrases_dataset(name=args.dataset,
                                                    split=args.dataset_split,
                                                    phrase_limit=args.phrase_limit,
                                                    phrase_col=args.dataset_phrase_col,
                                                    limit_col=args.dataset_limit_col,
                                                    limit_val=args.dataset_limit_val)
+    print(f"Loaded {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
+
+    # First phrase is to potentially get rid of some phrases
+    phrases = eval_helper.filter_phrases(phrases=phrases,
+                                         drop_max_len=args.drop_max_len,
+                                         drop_numbers=args.drop_numbers)
+    print(f"After filtering: {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
+    if len(phrases) == 0:
+        print(f"ERROR: All phrases were filtered out!")
+        sys.exit(1)
+
+    # Second phrase is to normalize the text in various ways
+    phrases = eval_helper.normalize_phrases(phrases=phrases,
+                                            lower=args.lower,
+                                            strip=args.strip,
+                                            truncate_max_len=args.truncate_max_len)
+    print(f"After normalization: {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
 
     start = timer()
     symbols = list(args.symbols)
@@ -129,24 +148,6 @@ if __name__ == "__main__":
     prediction_start = timer()
     for i, phrase in enumerate(phrases):
         phrase_start = timer()
-        phrase = phrase.strip()
-        if args.lower:
-            phrase = phrase.lower()
-        if args.strip:
-            phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
-
-        # Optionally we truncated phrases that are too long
-        # This can avoid OOM for the LLM doing things in batches
-        truncated = ""
-        if args.max_len and len(phrase) > args.max_len:
-            # First cut it off
-            phrase = phrase[:args.max_len]
-            # Then remove characters until we reach a space
-            while phrase[-1] != " ":
-                phrase = phrase[:-1]
-            phrase = phrase.strip()
-            total_truncated += 1
-            truncated = ", TRUNCATED"
 
         phrase_len = len(phrase)
         if args.trailing_space:
@@ -154,7 +155,7 @@ if __name__ == "__main__":
 
         total_chars += phrase_len
 
-        print(f"*** Phrase {i}: {phrase}, len: {phrase_len}{truncated}")
+        print(f"*** Phrase {i}: {phrase}, len: {phrase_len}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
@@ -237,6 +238,7 @@ if __name__ == "__main__":
             file = open(args.out_stats, "w")
             file.write(f"final_ks"
                        f"\tphrases"
+                       f"\ttotal_words"
                        f"\ttotal_chars"
                        f"\ttotal_keystrokes"
                        f"\ttotal_time"
@@ -255,6 +257,7 @@ if __name__ == "__main__":
 
         file.write(f"{final_ks:.6f}"
                    f"\t{len(phrases)}"
+                   f"\t{eval_helper.count_words(phrases)}"
                    f"\t{total_chars}"
                    f"\t{total_keystrokes}"
                    f"\t{timer() - start:.2f}"
