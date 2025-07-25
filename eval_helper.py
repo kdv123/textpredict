@@ -94,7 +94,9 @@ def normalize_phrases(phrases: List[str],
         if strip:
             phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
             phrase = re.sub(r'\s+', ' ', phrase).strip()
-        result.append(phrase)
+        # It could be the case we normalized it to be blank
+        if len(phrase) > 0:
+            result.append(phrase)
     return result
 
 def count_words(phrases: List[str]) -> int:
