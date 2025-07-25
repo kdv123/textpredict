@@ -12,18 +12,24 @@ from datetime import datetime
 from socket import gethostname
 import re
 import sys
+from datasets import load_dataset
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phrases", type=str, required=True, help="Input text file with phrases")
+    parser.add_argument("--phrases", type=str, help="Input text file with phrases")
+    parser.add_argument("--dataset", type=str, help="Hugging Face dataset to load phrases from")
+    parser.add_argument("--dataset-split", type=str, help="Split to use from the Hugging Face dataset")
+    parser.add_argument("--dataset-phrase-col", type=str, default="text", help="Dataset column containing phrases")
+    parser.add_argument("--dataset-limit-col", type=str, help="Dataset column used to limit to subset of dataset")
+    parser.add_argument("--dataset-limit-val", type=str, help="Value to match to include in phrases")
     parser.add_argument("--phrase-limit", type=int, help="Max phrases to evaluate")
     parser.add_argument("--lm", type=str, help="Filename of n-gram model to load")
     parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
-    parser.add_argument("--strip", action="store_true", help="Strip symbols except apostrophe")
-    parser.add_argument("--nbest", type=int, help="N-best list size", default=3)
-    parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis", default=4.0)
-    parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search", default=100)
+    parser.add_argument("--strip", action="store_true", help="Strip symbols from phrases except apostrophe")
+    parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
+    parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis")
+    parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--model-name", help="Model name of LLM")
@@ -39,8 +45,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Check for a variety of invalid command line switch combinations
     if not args.lm and not args.model_name:
         print(f"ERROR: Must specify either --lm  or --model_name")
+        sys.exit(1)
+
+    if not args.phrases and not args.dataset:
+        print(f"ERROR: Must specify either --phrases or --dataset")
+        sys.exit(1)
+
+    if args.phrases and args.dataset:
+        print(f"ERROR: Can't specify both --phrases and --dataset")
+        sys.exit(1)
+
+    if (args.dataset_limit_col and not args.dataset_limit_val) or (args.dataset_limit_val and not args.dataset_limit_col):
+        print(f"ERROR: Must specify both --dataset-limit-col and --dataset-limit-val")
         sys.exit(1)
 
     # Handy stuff to print out in our log files
@@ -48,12 +67,26 @@ if __name__ == "__main__":
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
 
-    # Read in the input file with sentences
-    phrase_file = open(args.phrases, "r")
-    phrases = phrase_file.readlines()
-    phrase_file.close()
+    if args.phrases:
+        # Read in a plain text file that has a sentence on each line
+        phrase_file = open(args.phrases, "r")
+        phrases = phrase_file.readlines()
+        phrase_file.close()
+    elif args.dataset:
+        # Read the sentences from a Hugging Face dataset
+        dataset = load_dataset(path=args.dataset, split=args.dataset_split)
+        print(f"Loaded dataset {args.dataset}:\n{dataset}")
+        # Optional limiting to rows with a column matching a given value
+        if args.dataset_limit_col:
+            dataset = dataset.filter(
+                function=lambda example:
+                example[args.dataset_limit_col] == example[args.dataset_limit_val])
+            print(f"Filtered dataset to:\n{dataset}")
+        phrases = dataset[args.dataset_phrase_col]
+
     # We may want to limit to only the first so many phrases
     if args.phrase_limit:
+        print(f"Before limiting, number of phrases: {len(phrases)}")
         while len(phrases) > args.phrase_limit:
             phrases.pop()
     print(f"Number phrases loaded: {len(phrases)}")
@@ -61,7 +94,6 @@ if __name__ == "__main__":
     start = timer()
     symbols = list(args.symbols)
     print(f"Symbols, size {len(symbols)}: {symbols}")
-
     print(f"Word end symbols: {args.word_end_symbols}")
 
     lm = None

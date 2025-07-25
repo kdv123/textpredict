@@ -45,8 +45,8 @@ class NGramLanguageModel(LanguageModel):
                       left_context: str,
                       word_end_symbols: List[str] = None,
                       nbest: int = None,
-                      beam_logp_best: float = 4.0,
-                      beam_search_max: int = 200,
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
@@ -59,6 +59,13 @@ class NGramLanguageModel(LanguageModel):
         :param return_log_probs: whether to return log probabilities of each word
         :return: List of tuples with words and their log probabilities
         """
+
+        # We want each language model class set its own default pruning values
+        # We want the client keystroke_savings.py to default to these if pruning switches aren't set
+        if beam_logp_best is None:
+            beam_logp_best = 4.0
+        if beam_search_max is None:
+            beam_search_max = 100
 
         # Since List is a mutable type, we can't set a default reliably in the method declaration
         # We'll set the default of a trailing space if caller didn't specify a list of right contexts
