@@ -86,6 +86,10 @@ def _load_phrases_plaintext(filename: str,
     phrases = phrase_file.readlines()
     phrase_file.close()
 
+    # Get rid of any line ending in the plaintext file
+    # This use to be done in the loop in the evaluation script
+    phrases = [phrase.strip() for phrase in phrases]
+
     if phrase_limit:
         phrases = phrases[:phrase_limit]
     return phrases
@@ -166,7 +170,6 @@ def _normalize_phrases(phrases: List[str],
         if strip_symbols:
             phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
             phrase = re.sub(r'\s+', ' ', phrase).strip()
-
         # It could be the case we normalized it to be blank
         if len(phrase) > 0:
             result.append(phrase)
