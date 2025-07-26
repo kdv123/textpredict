@@ -316,7 +316,7 @@ if __name__ == "__main__":
 
     # Model-level output
     print(f"OVERALL \
-        \nphrases = {phrase_count}, \
+        \nphrases = {phrase_count} \
         \nzero-prob events = {zero_prob} \
         \nper-symbol prediction time = {overall_per_symbol_time:.6f} +/- {overall_std_time:.6f} [{overall_min_time:.6f}, {overall_max_time:.6f}] \
         \n95% CI = [{ci_floor:.6f}, {ci_ceiling:.6f}] \
