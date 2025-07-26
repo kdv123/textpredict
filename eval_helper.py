@@ -32,7 +32,7 @@ def add_args(parser):
     parser.add_argument("--fp16", action="store_true", help="Convert model to fp16 (CUDA only)")
     parser.add_argument("--num-cores", type=int, help="Limit pytorch to specified number of cores")
     parser.add_argument("--ngram-lm", help="N-gram model to load")
-    parser.add_argument("--lm", action="store_true", help="Use n-gram language model")
+    parser.add_argument("--ngram", action="store_true", help="Use n-gram language model")
     parser.add_argument("--causal", action="store_true", help="Use causal LLM")
     parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
     parser.add_argument("--model-name", help="Model name of LLM")
@@ -41,6 +41,7 @@ def add_args(parser):
     parser.add_argument("--out-extra", action="append", dest="out_extra_cols", help="Output additional column to stats file, format: COLUMN_NAME,VALUE")
     parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
     parser.add_argument("--drop-numbers", action="store_true", help="Drop phrases with numbers")
+    parser.add_argument("--drop-regex", type=str, help="Drop phrases that don't match this regular expression")
     parser.add_argument("--drop-max-len", type=int, help="Drop phrases with more than this many characters")
     parser.add_argument("--strip-symbols", action="store_true", help="Strip symbols from phrases except apostrophe")
     parser.add_argument("--truncate-max-len", type=int, help="Truncate phrases longer than this many characters")
@@ -54,7 +55,7 @@ def check_args_for_errors(args):
     :param args: Command line arguments passed to main function
     :return:
     """
-    if args.lm and not args.ngram_lm:
+    if args.ngram and not args.ngram_lm:
         print(f"ERROR: N-gram model requires n-gram model to be specified with --ngram-lm!")
         exit(1)
     if not args.phrases and not args.dataset:
@@ -125,7 +126,8 @@ def _load_phrases_dataset(name: str,
 
 def _filter_phrases(phrases: List[str],
                    drop_numbers: bool = False,
-                   drop_max_len: int = None) -> List[str]:
+                   drop_max_len: int = None,
+                   drop_regex: str = None) -> List[str]:
     """
     Remove entire phrases based on different criteria
     :param phrases: Original list of all the phrases
@@ -136,7 +138,8 @@ def _filter_phrases(phrases: List[str],
     result = []
     for phrase in phrases:
         if (not drop_max_len or len(phrase) <= drop_max_len) and \
-           (not drop_numbers or not re.search(r'\d', phrase)):
+           (not drop_numbers or not re.search(r'\d', phrase)) and \
+           (not drop_regex or re.match(drop_regex, phrase)):
            result.append(phrase)
     return result
 
@@ -243,8 +246,9 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
 
     # First phrase is to potentially get rid of some phrases
     phrases = _filter_phrases(phrases=phrases,
-                                         drop_max_len=args.drop_max_len,
-                                         drop_numbers=args.drop_numbers)
+                              drop_max_len=args.drop_max_len,
+                              drop_numbers=args.drop_numbers,
+                              drop_regex=args.drop_regex)
     if not quiet:
         print(f"After filtering: {len(phrases)} phrases, words = {count_words(phrases)}")
     if len(phrases) == 0:

@@ -57,10 +57,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Check for various invalid combinations of command line options
-    if sum([args.lm, args.causal, args.byte, args.classifier, args.mix, args.mix_byte]) != 1:
-        print(f"ERROR: Exactly one of --lm, --causal, --mix, --mix-byte, --byte, --classifier must be specified!")
+    if sum([args.ngram, args.causal, args.byte, args.classifier, args.mix, args.mix_byte]) != 1:
+        print(f"ERROR: Exactly one of --ngram --causal, --mix, --mix-byte, --byte, --classifier must be specified!")
         exit(1)
-    if (args.causal or args.byte or args.classifer or args.mix or args.mix_byte) and not args.model_name:
+    if (args.causal or args.byte or args.classifier or args.mix or args.mix_byte) and not args.model_name:
         print(f"ERROR: Transformer model must be specified with --model-name!")
         exit(1)
     if (args.mix or args.mix_byte) and not args.ngram_lm:
@@ -158,7 +158,7 @@ if __name__ == "__main__":
                                             },
                                             {"lm_path": args.ngram_lm}])
         print(f"Model load time = {timer() - start:.2f}")
-    elif args.classifer:
+    elif args.classifier:
         print(f"Loading classifier model: {args.model_name}, model directory {args.model_dir}")
         lm = ClassifierLanguageModel(symbol_set=symbol_set,
                                      lang_model_name=args.model_name,
@@ -231,7 +231,7 @@ if __name__ == "__main__":
             correct_char = ""
 
             # BciPy treats space as underscore
-            if (token == args.space_symbol):
+            if token == args.space_symbol:
                 token = SPACE_CHAR
                 correct_char = SPACE_CHAR
             else:

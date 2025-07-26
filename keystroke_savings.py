@@ -32,8 +32,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
-    if sum([args.lm, args.causal, args.byte]) != 1:
-        print(f"ERROR: Exactly one of --lm, --causal, --byte must be specified!")
+    if sum([args.ngram, args.causal, args.byte]) != 1:
+        print(f"ERROR: Exactly one of --ngram, --causal, --byte must be specified!")
         exit(1)
     if (args.causal or args.byte) and not args.model_name:
         print(f"ERROR: Transformer model must be specified with --model-name!")
