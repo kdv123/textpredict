@@ -51,8 +51,6 @@ if __name__ == "__main__":
     parser.add_argument("--srilm-file", help="Output SRILM format debug 2 log file")
     parser.add_argument("--bootstrap-samples", type=int, default=9999, help="Number of samples to use for bootstrap estimates")
     parser.add_argument("--bootstrap-method", default="BCa", help="Method to use for bootstrap, BCa | basic | percentile")
-    parser.add_argument("--lora", action="store_true", default=False, help="Use LoRA adapter with base model")
-    parser.add_argument("--lora-path", help="Hugging Face or local path to LoRA adapter")
     parser.add_argument("--skip-oov-symbols", action="store_true", help="Skip symbols that aren't in our symbol set")
     args = parser.parse_args()
 
@@ -66,12 +64,7 @@ if __name__ == "__main__":
     if (args.mix or args.mix_byte) and not args.ngram_lm:
         print(f"ERROR: Mixture model requires n-gram model to be specified with --ngram-lm!")
         exit(1)
-    if args.lora and not args.causal:
-        print("ERROR: LoRA adapter is only currently supported for causal model!")
-        exit(1)
-    if args.lora and not args.lora_path:
-        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!")
-        exit(1)
+
     eval_helper.check_args_for_errors(args)
 
     # Check for settings that are suspicious but don't result in termination
@@ -190,14 +183,14 @@ if __name__ == "__main__":
     all_sentence_ppls = []
 
     # Iterate over phrases
-    for phrase in phrases:
+    for i, phrase in enumerate(phrases):
         symbols = 0
         accum = 0.0
         sent_ppl = 0.0
 
         # Phrase-level output
         if args.verbose >= 1:
-            print(f"sentence = '{phrase}'")
+            print(f"*** Phrase {i}: {phrase}")
 
         # Split into a list of characters and convert spaces to pseudo-word
         tokens = [args.space_symbol if char == " " else char for char in phrase]

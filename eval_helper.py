@@ -37,6 +37,8 @@ def add_args(parser):
     parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
     parser.add_argument("--model-name", help="Model name of LLM")
     parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
+    parser.add_argument("--lora", action="store_true", default=False, help="Use LoRA adapter with base model")
+    parser.add_argument("--lora-path", help="Hugging Face or local path to LoRA adapter")
     parser.add_argument("--out-stats", help="Output summary stats to this tab delimited file")
     parser.add_argument("--out-extra", action="append", dest="out_extra_cols", help="Output additional column to stats file, format: COLUMN_NAME,VALUE")
     parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
@@ -73,6 +75,12 @@ def check_args_for_errors(args):
             if len(cols) != 2:
                 print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}!")
                 exit(1)
+    if args.lora and not args.causal:
+        print("ERROR: LoRA adapter is only currently supported for causal model!")
+        exit(1)
+    if args.lora and not args.lora_path:
+        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!")
+        exit(1)
 
 def _load_phrases_plaintext(filename: str,
                            phrase_limit: int = None) -> List[str]:
@@ -275,13 +283,18 @@ def print_startup_info(args) -> None:
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
 
-def load_language_model(args, symbol_set: List[str], device: str, quiet: bool = False) -> LanguageModel:
+def load_language_model(args,
+                        symbol_set: List[str],
+                        device: str,
+                        quiet: bool = False,
+                        normal_space: bool = False) -> LanguageModel:
     """
     Load one of the language model types shared by all evaluation scripts.
     :param args: Command line arguments passed to main function
     :param symbol_set: List of symbols to send to language model
     :param device: Device to load the model on
     :param quiet: Can be used to supress informational output
+    :param normal_space: Currently byte LLM uses normal space character for keystroke savings, but needs BciPy underscore for perplexity, yuck!
     :return: LanguageModel object, or None if type not supported
     """
     start = timer()
@@ -301,11 +314,11 @@ def load_language_model(args, symbol_set: List[str], device: str, quiet: bool = 
                                      lang_model_name=args.model_name,
                                      lm_device=device,
                                      lm_path=args.model_dir,
-                                     lm_left_context="",
+                                     lm_left_context=args.left_context,
                                      fp16=args.fp16,
-                                     mixed_case_context=False,
+                                     mixed_case_context=args.mixed_case_context,
                                      case_simple=args.case_simple,
-                                     normal_space=True)
+                                     normal_space=normal_space)
     elif args.causal:
         if not quiet:
             print(f"Loading causal LLM: {args.model_name}, model directory {args.model_dir}")

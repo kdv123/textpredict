@@ -52,7 +52,8 @@ if __name__ == "__main__":
 
     lm = eval_helper.load_language_model(args=args,
                                          symbol_set=symbol_set,
-                                         device=device)
+                                         device=device,
+                                         normal_space=True)
     total_chars = 0
     total_keystrokes = 0
     total_truncated = 0
@@ -69,7 +70,7 @@ if __name__ == "__main__":
 
         total_chars += phrase_len
 
-        print(f"*** Phrase {i}: {phrase}, len: {phrase_len}")
+        print(f"*** Phrase {i}: {phrase}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
