@@ -14,15 +14,13 @@ class NGramLanguageModel(LanguageModel):
                  symbol_set: List[str],
                  lm_path: str,
                  skip_symbol_norm: Optional[bool] = False,
-                 space_symbol: str = "<sp>",
-                 sentence_end: str = "</s>"):
+                 space_symbol: str = "<sp>"):
         """
         Construct an instance of NGramLanguageModel.
         :param symbol_set: symbols we want to make predictions over
         :param lm_path: location of the KenLM format n-gram language model
         :param skip_symbol_norm: don't normalize character prediction distribution to just symbol_set
         :param space_symbol: pseudo-word for spaces between words
-        :param sentence_end: pseudo-word for end of sentence event
         """
         super().__init__(symbol_set=symbol_set)
         print(f"Creating n-gram language model, lm_path = {lm_path}")
@@ -31,7 +29,6 @@ class NGramLanguageModel(LanguageModel):
         self.skip_symbol_norm = skip_symbol_norm
         self.load()
         self.space_symbol = space_symbol
-        self.sentence_end = sentence_end
 
         # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
         self.symbol_set_converted = []

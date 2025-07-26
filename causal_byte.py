@@ -178,20 +178,39 @@ class CausalByteLanguageModel(LanguageModel):
 
     def predict_words(self,
                       left_context: str,
-                      right_context: str = " ",
+                      word_end_symbols: List[str] = None,
                       nbest: int = None,
-                      beam: float = 3.0,
-                      return_log_probs = False) -> List:
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
+                      return_log_probs=False) -> List:
+
         """
         Given some left text context, predict the most likely next words.
         Left and right context use normal space character for any spaces, we convert internally to <sp>
         :param left_context: previous text we are condition on
-        :param right_context: characters that must appear right of our predicted next word
+        :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
         :param nbest: number of most likely words to return
-        :param beam: log-prob beam used during the search
+        :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_search_max: maximum number of hypotheses to track during each extension of search
         :param return_log_probs: whether to return log probabilities of each word
         :return: List of tuples with words and (optionally) their log probabilities
         """
+
+        # We want each language model class set its own default pruning values
+        # We want the client keystroke_savings.py to default to these if pruning switches aren't set
+        if beam_logp_best is None:
+            beam_logp_best = 5.0
+        if beam_search_max is None:
+            beam_search_max = 100
+
+        # Since List is a mutable type, we can't set a default reliably in the method declaration
+        # We'll set the default of a trailing space if caller didn't specify a list of right contexts
+        if word_end_symbols is None:
+            word_end_symbols = [" "]
+
+        # TODO: temporary fix before redoing algorithm to handle word_end_symbols
+        right_context = " "
+
         # Optional simple case of left context
         left_context = self._simple_case(context=left_context)
 
@@ -276,7 +295,7 @@ class CausalByteLanguageModel(LanguageModel):
                             best_finished_log_prob = new_hypo[LOGP]
                     # Keep if it is still within beam width of our best hypothesis thus far
                     # But if the n-best list is fully populated then we must beat the current worse on the heap
-                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam and \
+                    elif (best_finished_log_prob - new_hypo[LOGP]) < beam_logp_best and \
                             (not nbest or len(finished_hypos) < nbest or new_hypo[LOGP] > finished_hypos[0][LOGP]):
                         next_hypos.append(new_hypo)
             current_hypos = next_hypos

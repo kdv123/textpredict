@@ -3,14 +3,15 @@
 # Supports the following types of language models:
 #  1) n-gram character, via KenLM library
 #  2) ByGPT5 byte tokenized LLM, via Hugging Face plus uniformers library
-
+from eval_helper import load_language_model
 from ngram import NGramLanguageModel
 from causal_byte import CausalByteLanguageModel
 from timeit import default_timer as timer
 import argparse
 from datetime import datetime
 from socket import gethostname
-import sys
+from sys import exit
+from sys import stdout
 import os
 import eval_helper
 import fcntl
@@ -18,127 +19,40 @@ import fcntl
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phrases", type=str, help="Input text file with phrases")
-    parser.add_argument("--dataset", type=str, help="Hugging Face dataset to load phrases from")
-    parser.add_argument("--dataset-split", type=str, help="Split to use from the Hugging Face dataset")
-    parser.add_argument("--dataset-phrase-col", type=str, default="text", help="Dataset column containing phrases")
-    parser.add_argument("--dataset-limit-col", type=str, help="Dataset column used to limit to subset of dataset")
-    parser.add_argument("--dataset-limit-val", type=str, help="Value to match to include in phrases")
-    parser.add_argument("--phrase-limit", type=int, help="Max phrases to evaluate")
-    parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
-    parser.add_argument("--drop-numbers", action="store_true", help="Drop phrases with numbers")
-    parser.add_argument("--drop-max-len", type=int, help="Drop phrases with more than this many characters")
-    parser.add_argument("--strip", action="store_true", help="Strip symbols from phrases except apostrophe")
-    parser.add_argument("--truncate-max-len", type=int, help="Truncate phrases longer than this many characters")
-    parser.add_argument("--lm", type=str, help="Filename of n-gram model to load")
+    eval_helper.add_args(parser)
     parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
     parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis")
     parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
-    parser.add_argument("--model-name", help="Model name of LLM")
-    parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
-    parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
-    parser.add_argument("--fp16", action="store_true", help="Convert LLM to fp16 (CUDA only)")
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
-    parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
-    parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
-    parser.add_argument("--out-stats", help="Output summary stats to this tab delimited file")
-    parser.add_argument("--out-extra", action="append", dest="out_extra_cols", help="Output additional column to stats file, format: COLUMN_NAME,VALUE")
 
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
-    if not args.lm and not args.model_name:
-        print(f"ERROR: Must specify either --lm  or --model_name")
-        sys.exit(1)
+    if sum([args.lm, args.causal, args.byte]) != 1:
+        print(f"ERROR: Exactly one of --lm, --causal, --byte must be specified!")
+        exit(1)
+    if (args.causal or args.byte) and not args.model_name:
+        print(f"ERROR: Transformer model must be specified with --model-name!")
+        exit(1)
 
-    if not args.phrases and not args.dataset:
-        print(f"ERROR: Must specify either --phrases or --dataset")
-        sys.exit(1)
-
-    if args.phrases and args.dataset:
-        print(f"ERROR: Can't specify both --phrases and --dataset")
-        sys.exit(1)
-
-    if (args.dataset_limit_col and not args.dataset_limit_val) or (args.dataset_limit_val and not args.dataset_limit_col):
-        print(f"ERROR: Must specify both --dataset-limit-col and --dataset-limit-val")
-        sys.exit(1)
-
-    if args.out_extra_cols:
-        for extra in args.out_extra_cols:
-            cols = extra.split(",")
-            if len(cols) != 2:
-                print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}")
-                sys.exit(1)
-
-    # Handy stuff to print out in our log files
-    print(f"START: {datetime.now()}")
-    print(f"ARGS: {args}")
-    print(f"HOSTNAME: {gethostname()}")
-
-    # Load the phrases we are going to simulate writing
-    if args.phrases:
-        phrases = eval_helper.load_phrases_plaintext(filename=args.phrases, phrase_limit=args.phrase_limit)
-    else:
-        phrases = eval_helper.load_phrases_dataset(name=args.dataset,
-                                                   split=args.dataset_split,
-                                                   phrase_limit=args.phrase_limit,
-                                                   phrase_col=args.dataset_phrase_col,
-                                                   limit_col=args.dataset_limit_col,
-                                                   limit_val=args.dataset_limit_val)
-    print(f"Loaded {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
-
-    # First phrase is to potentially get rid of some phrases
-    phrases = eval_helper.filter_phrases(phrases=phrases,
-                                         drop_max_len=args.drop_max_len,
-                                         drop_numbers=args.drop_numbers)
-    print(f"After filtering: {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
-    if len(phrases) == 0:
-        print(f"ERROR: All phrases were filtered out!")
-        sys.exit(1)
-
-    # Second phrase is to normalize the text in various ways
-    phrases = eval_helper.normalize_phrases(phrases=phrases,
-                                            lower=args.lower,
-                                            strip=args.strip,
-                                            truncate_max_len=args.truncate_max_len)
-    print(f"After normalization: {len(phrases)} phrases, words = {eval_helper.count_words(phrases)}")
+    eval_helper.check_args_for_errors(args)
+    eval_helper.print_startup_info(args)
+    eval_helper.set_cpu_cores(args)
+    device = eval_helper.get_device(args)
+    phrases = eval_helper.load_phrases(args)
 
     start = timer()
-    symbols = list(args.symbols)
-    print(f"Symbols, size {len(symbols)}: {symbols}")
+    symbol_set = list(args.symbols)
+    print(f"Symbols, size {len(symbol_set)}: {symbol_set}")
     print(f"Word end symbols: {args.word_end_symbols}")
 
-    lm = None
-    device = "cpu"
-    if args.use_mps:
-        device = "mps"
-    elif args.use_cuda:
-        device = "cuda"
-
-    if args.lm:
-        print(f"Loading n-gram LM: {lm}")
-        lm = NGramLanguageModel(symbols, args.lm, False)
-    elif args.byte:
-        if args.model_dir:
-            print(f"Loading byte LLM: {args.model_name} from {args.model_dir}")
-        else:
-            print(f"Loading byte LLM: {args.model_name}")
-        lm = CausalByteLanguageModel(symbol_set=symbols,
-                                     lang_model_name=args.model_name,
-                                     lm_device=device,
-                                     lm_path=args.model_dir,
-                                     lm_left_context="",
-                                     fp16=args.fp16,
-                                     mixed_case_context=False,
-                                     case_simple=args.case_simple,
-                                     normal_space=True)
-
-    print(f"Model load time = {timer() - start:.2f}")
-
+    lm = eval_helper.load_language_model(args=args,
+                                         symbol_set=symbol_set,
+                                         device=device)
     total_chars = 0
     total_keystrokes = 0
     total_truncated = 0
@@ -211,14 +125,14 @@ if __name__ == "__main__":
                     j += 1
             else:
                 print(f" TYPED: '{phrase[j]}'")
-            sys.stdout.flush()
+            stdout.flush()
             j += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
         ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
-        sys.stdout.flush()
+        stdout.flush()
 
     print()
     final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
