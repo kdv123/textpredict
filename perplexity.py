@@ -43,8 +43,6 @@ if __name__ == "__main__":
     parser.add_argument("--ppl-file", help="Output sentence and ppl to a file")
     parser.add_argument("--symbol-file", help="Output symbol log probs to a file")
     parser.add_argument("--json-file", help="Output overall model data to JSON file with specified file name.")
-    parser.add_argument("--mixed-case-context", action="store_true", default=False, help="Use mixed case left context")
-    parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of let context")
     parser.add_argument("--srilm-file", help="Output SRILM format debug 2 log file")
     parser.add_argument("--bootstrap-samples", type=int, default=9999, help="Number of samples to use for bootstrap estimates")
     parser.add_argument("--bootstrap-method", default="BCa", help="Method to use for bootstrap, BCa | basic | percentile")

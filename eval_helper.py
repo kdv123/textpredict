@@ -53,6 +53,8 @@ def add_args(parser):
     parser.add_argument("--skip-norm", action="store_true", default=False, help="Skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
     parser.add_argument("--left-context", help="Left language model context for transformer models")
     parser.add_argument("--left-context-file", help="File with left language model context for transformer model")
+    parser.add_argument("--mixed-case-context", action="store_true", default=False, help="Use mixed case left context")
+    parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
 
 def check_args_for_errors(args):
     """
