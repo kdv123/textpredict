@@ -15,7 +15,6 @@ from classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
 import argparse
-import string
 import json
 import numpy as np
 from sys import exit
@@ -37,8 +36,6 @@ if __name__ == "__main__":
     parser.add_argument("--mix", action="store_true", help="Use mixture of n-gram and subword LLM")
     parser.add_argument("--mix-byte", action="store_true", help="Use mixture of n-gram and byte LLM")
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="Weight for n-gram in mixture model")
-    parser.add_argument("--left-context", default="", help="Left language model context for causal model")
-    parser.add_argument("--left-context-file", default="", help="Name of file containing the left language model context for causal model. Context using --left-context takes priority.")
     parser.add_argument("--add-char", action="append", dest="extra_chars", help="Add character to symbol set")
     parser.add_argument("--time-outliers", action="store_true", help="Print time outliers at end")
     parser.add_argument("--beam-width", type=int, help="Search beam width for causal LM, recommended value = 8")
@@ -64,7 +61,6 @@ if __name__ == "__main__":
     if (args.mix or args.mix_byte) and not args.ngram_lm:
         print(f"ERROR: Mixture model requires n-gram model to be specified with --ngram-lm!")
         exit(1)
-
     eval_helper.check_args_for_errors(args)
 
     # Check for settings that are suspicious but don't result in termination
@@ -75,28 +71,12 @@ if __name__ == "__main__":
     eval_helper.set_cpu_cores(args)
     phrases = eval_helper.load_phrases(args)
     device = eval_helper.get_device(args)
-    phrases = eval_helper.load_phrases(args)
 
-    rng = np.random.default_rng(234893458942534)
-
-    if args.left_context_file != "" and args.left_context == "":
-        try:
-            with open(args.left_context_file, "r", encoding="utf-8") as f:
-                contents = ""
-                for line in f:
-                    if line not in string.whitespace:
-                        contents += f" {line.rstrip()}"
-                contents = contents.strip()
-                args.left_context = contents
-        except FileNotFoundError:
-            print(f"ERROR: cannot open left context file: {args.left_context_file}!")
-            exit(1)
-    stdout.flush()
-
-    # Allow passing in of space characters in the context using the space pseudo-word
-    args.left_context = args.left_context.replace(args.space_symbol, " ")
+    eval_helper.prep_left_context(args)
     print(f"Prediction left context: '{args.left_context}'")
     stdout.flush()
+
+    rng = np.random.default_rng(234893458942534)
 
     lm = None
 

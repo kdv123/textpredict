@@ -13,6 +13,7 @@ from ngram import NGramLanguageModel
 from causal_byte import CausalByteLanguageModel
 from causal import CausalLanguageModel
 from language_model import LanguageModel
+from string import whitespace
 
 def add_args(parser):
     """
@@ -50,6 +51,8 @@ def add_args(parser):
     parser.add_argument("--strip-start-end-words", action="store_true", help="Strip <s> and </s> words from phrases")
     parser.add_argument("--space-symbol", type=str, default="<sp>", help="Pseudo-word used by n-gram model for space character")
     parser.add_argument("--skip-norm", action="store_true", default=False, help="Skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
+    parser.add_argument("--left-context", help="Left language model context for transformer models")
+    parser.add_argument("--left-context-file", help="File with left language model context for transformer model")
 
 def check_args_for_errors(args):
     """
@@ -80,6 +83,9 @@ def check_args_for_errors(args):
         exit(1)
     if args.lora and not args.lora_path:
         print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!")
+        exit(1)
+    if args.left_context and args.left_context_file:
+        print("ERROR: Only one of --left-context or --left-context-file can be specified!")
         exit(1)
 
 def _load_phrases_plaintext(filename: str,
@@ -338,3 +344,28 @@ def load_language_model(args,
     if not quiet:
         print(f"Model load time = {timer() - start:.2f}")
     return lm
+
+def prep_left_context(args):
+    """
+    Handles optional left context loading from a file and conversion of space character in provided context
+    :param args: Command line arguments passed to main function
+    :return:
+    """
+    if args.left_context_file:
+        try:
+            with open(args.left_context_file, "r", encoding="utf-8") as f:
+                contents = ""
+                for line in f:
+                    if line not in whitespace:
+                        contents += f" {line.rstrip()}"
+                contents = contents.strip()
+                args.left_context = contents
+        except FileNotFoundError:
+            print(f"ERROR: cannot open left context file: {args.left_context_file}!")
+            exit(1)
+    elif not args.left_context:
+        # Default left context to blank string
+        args.left_context = ""
+
+    # Allow passing in of space characters in the context using the space pseudo-word
+    args.left_context = args.left_context.replace(args.space_symbol, " ")

@@ -28,7 +28,6 @@ if __name__ == "__main__":
     parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
-
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
@@ -38,12 +37,16 @@ if __name__ == "__main__":
     if (args.causal or args.byte) and not args.model_name:
         print(f"ERROR: Transformer model must be specified with --model-name!")
         exit(1)
-
     eval_helper.check_args_for_errors(args)
+
     eval_helper.print_startup_info(args)
     eval_helper.set_cpu_cores(args)
     device = eval_helper.get_device(args)
     phrases = eval_helper.load_phrases(args)
+
+    eval_helper.prep_left_context(args)
+    print(f"Prediction left context: '{args.left_context}'")
+    stdout.flush()
 
     start = timer()
     symbol_set = list(args.symbols)
@@ -76,7 +79,7 @@ if __name__ == "__main__":
         phrase_predictions = 0
         # Iterate over all character positions in the phrase
         while j < len(phrase):
-            left_context = phrase[0:j]
+            current_left_context = phrase[0:j]
 
             # Figure out the target word
             # If the next letter is space, then our target is the current word
@@ -96,17 +99,18 @@ if __name__ == "__main__":
                 k += 1
 
             # Adjust to one less prediction if using literal slot and not at the start of a word
-            use_literal = args.literal_slot and len(left_context) > 0 and left_context[-1] != " "
+            use_literal = args.literal_slot and len(current_left_context) > 0 and current_left_context[-1] != " "
             nbest = args.nbest
             if use_literal:
                 nbest -= 1
-            words = lm.predict_words(left_context, nbest=nbest,
+            words = lm.predict_words(left_context=current_left_context,
+                                     nbest=nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols)
             # Add the literal text type as the final slot
             if use_literal:
-                words.append(left_context)
+                words.append(current_left_context)
 
             total_predictions += 1
             phrase_predictions += 1
@@ -116,7 +120,7 @@ if __name__ == "__main__":
                     print_words += f" {word.upper()}"
                 else:
                     print_words += f" {word}"
-            print(f" predictions:{print_words}, left '{left_context}', target '{target_word}', keys {phrase_keystrokes}")
+            print(f" predictions:{print_words}, left '{current_left_context}', target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
