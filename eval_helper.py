@@ -90,6 +90,16 @@ def check_args_for_errors(args):
         print("ERROR: Only one of --left-context or --left-context-file can be specified!")
         exit(1)
 
+def check_args_for_warnings(args):
+    """
+    Check for suspicious things in the command line switches shared by evaluation scripts
+    :param args: Command line arguments passed to main function
+    :return:
+    """
+    # Check for settings that are suspicious but don't result in termination
+    if args.case_simple and not args.mixed_case_context:
+        print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
+
 def _load_phrases_plaintext(filename: str,
                            phrase_limit: int = None) -> List[str]:
     """

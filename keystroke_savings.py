@@ -25,7 +25,6 @@ if __name__ == "__main__":
     parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
-    parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
     args = parser.parse_args()
@@ -38,6 +37,7 @@ if __name__ == "__main__":
         print(f"ERROR: Transformer model must be specified with --model-name!")
         exit(1)
     eval_helper.check_args_for_errors(args)
+    eval_helper.check_args_for_warnings(args)
 
     eval_helper.print_startup_info(args)
     eval_helper.set_cpu_cores(args)

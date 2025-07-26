@@ -60,10 +60,7 @@ if __name__ == "__main__":
         print(f"ERROR: Mixture model requires n-gram model to be specified with --ngram-lm!")
         exit(1)
     eval_helper.check_args_for_errors(args)
-
-    # Check for settings that are suspicious but don't result in termination
-    if args.case_simple and not args.mixed_case_context:
-        print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
+    eval_helper.check_args_for_warnings(args)
 
     eval_helper.print_startup_info(args)
     eval_helper.set_cpu_cores(args)
