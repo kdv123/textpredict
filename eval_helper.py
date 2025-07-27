@@ -1,6 +1,5 @@
 # Home to code we want to share from different scripts that perform evaluations using the language models.
 
-from typing import List
 from datasets import load_dataset
 import re
 from torch import set_num_threads
@@ -14,8 +13,10 @@ from causal_byte import CausalByteLanguageModel
 from causal import CausalLanguageModel
 from language_model import LanguageModel
 from string import whitespace
+from sys import stderr
+from argparse import ArgumentParser, Namespace
 
-def add_args(parser):
+def add_args(parser: ArgumentParser) -> None:
     """
     Add command line switches that are the same between evaluation scripts
     :param parser:
@@ -57,44 +58,44 @@ def add_args(parser):
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Symbols we make predictions over")
     parser.add_argument("--predict-lower", action="store_true", default=False, help="Prediction of lowercase characters only")
 
-def check_args_for_errors(args):
+def check_args_for_errors(args: Namespace) -> None:
     """
     Check for fatal errors for command line switches shared by evaluation scripts
     :param args: Command line arguments passed to main function
     :return:
     """
     if args.ngram and not args.ngram_lm:
-        print(f"ERROR: N-gram model requires n-gram model to be specified with --ngram-lm!")
+        print(f"ERROR: N-gram model requires n-gram model to be specified with --ngram-lm!", file = stderr)
         exit(1)
     if not args.phrases and not args.dataset:
-        print(f"ERROR: Must specify either --phrases or --dataset!")
+        print(f"ERROR: Must specify either --phrases or --dataset!", file = stderr)
         exit(1)
     if args.phrases and args.dataset:
-        print(f"ERROR: Can't specify both --phrases and --dataset!")
+        print(f"ERROR: Can't specify both --phrases and --dataset!", file = stderr)
         exit(1)
     if (args.dataset_limit_col and not args.dataset_limit_val) or (args.dataset_limit_val and not args.dataset_limit_col):
-        print(f"ERROR: Must specify both --dataset-limit-col and --dataset-limit-val!")
+        print(f"ERROR: Must specify both --dataset-limit-col and --dataset-limit-val!", file = stderr)
         exit(1)
     if args.out_extra_cols:
         for extra in args.out_extra_cols:
             cols = extra.split(",")
             if len(cols) != 2:
-                print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}!")
+                print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}!", file = stderr)
                 exit(1)
     if args.lora and not args.causal:
-        print("ERROR: LoRA adapter is only currently supported for causal model!")
+        print("ERROR: LoRA adapter is only currently supported for causal model!", file = stderr)
         exit(1)
     if args.lora and not args.lora_path:
-        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!")
+        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!", file = stderr)
         exit(1)
     if args.left_context and args.left_context_file:
-        print("ERROR: Only one of --left-context or --left-context-file can be specified!")
+        print("ERROR: Only one of --left-context or --left-context-file can be specified!", file = stderr)
         exit(1)
     if args.lower and args.case_simple:
-        print("ERROR: Only one of --lower and --case-simple should be specified!")
+        print("ERROR: Only one of --lower and --case-simple should be specified!", file = stderr)
         exit(1)
 
-def check_args_for_warnings(args):
+def check_args_for_warnings(args: Namespace) -> None:
     """
     Check for suspicious things in the command line switches shared by evaluation scripts
     :param args: Command line arguments passed to main function
@@ -102,10 +103,12 @@ def check_args_for_warnings(args):
     """
     # Check for settings that are suspicious but don't result in termination
     if args.ngram and not args.lower:
-        print(f"WARNING: Unless you have a mixed case n-gram model, you should set --lower")
+        print(f"WARNING: Unless you have a mixed case n-gram model, you should set --lower!", file = stderr)
+    if args.ngram and args.case_simple:
+        print(f"WARNING: Unless you have a mixed case n-gram model, you should not set --case-simple!", file = stderr)
 
 def _load_phrases_plaintext(filename: str,
-                           phrase_limit: int = None) -> List[str]:
+                            phrase_limit: int = None) -> List[str]:
     """
     Load phrases from a plaintext file with a phrase on each line
     :param filename: Filename containing the phrases
@@ -126,11 +129,11 @@ def _load_phrases_plaintext(filename: str,
     return phrases
 
 def _load_phrases_dataset(name: str,
-                         split: str,
-                         phrase_col: str = "text",
-                         phrase_limit: int = None,
-                         limit_col = None,
-                         limit_val = None) -> List[str]:
+                          split: str,
+                          phrase_col: str = "text",
+                          phrase_limit: int = None,
+                          limit_col = None,
+                          limit_val = None) -> List[str]:
     """
     Load phrases from a dataset
     :param name: Name of the dataset
@@ -177,8 +180,7 @@ def _normalize_phrases(phrases: List[str],
                        lower: bool = False,
                        strip_symbols: bool = False,
                        truncate_max_len: int = None,
-                       strip_start_end_words: bool = False,
-                       case_simple: bool = False) -> List[str]:
+                       strip_start_end_words: bool = False) -> List[str]:
     """
     Perform text normalization on the phrases
     :param phrases: Original list of all the phrases
@@ -186,7 +188,6 @@ def _normalize_phrases(phrases: List[str],
     :param strip_symbols: Converts characters besides A-Z and apostrophe to space then collapses contiguous whitespace
     :param truncate_max_len: Truncate any phrase with this many characters
     :param strip_start_end_words: Strip the start and end words <s> and </s>
-    :param case_simple: Lowercase then do simple casing heuristic
     :return: List of phrases
     """
     result = []
@@ -206,40 +207,37 @@ def _normalize_phrases(phrases: List[str],
         if strip_symbols:
             phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
             phrase = re.sub(r'\s+', ' ', phrase).strip()
-        if case_simple:
-            phrase = _case_simple(phrase)
         # It could be the case we normalized it to be blank
         if len(phrase) > 0:
             result.append(phrase)
     return result
 
-def _case_simple(phrase: str) -> str:
+def case_simple(phrase: str) -> str:
     """
     Handles the optional simple heuristic based casing of phrases
-    We first lowercase the text, then use simple rules to add cas back
+    We first lowercase the text, then use simple rules to add case back
     :param phrase: the existing left context
     :return: the simple cased version of the left context (or original if not enabled)
     """
-    simple_upper_words = {"i": "I",
-                          "i'll": "I'll",
-                          "i've": "I've",
-                          "i'd": "I'd",
-                          "i'm": "I'm"}
-    cased_context = ""
+
+    # The trailing spaces makes sure we don't replace in the left context until we are
+    # sure it is one of these words, otherwise we might capitalize mid-sentence words like it
+    simple_upper_words = {"i ": "I ",
+                          "i'll ": "I'll ",
+                          "i've ": "I've ",
+                          "i'd ": "I'd ",
+                          "i'm ": "I'm "}
+
+    # Remove any existing casing since we are simulating automatic casing
     phrase = phrase.lower()
-    words = phrase.split()
-    for i, word in enumerate(words):
-        if i == 0 and word[0] >= 'a' and word[0] <= 'z':
-            word = word[0].upper() + word[1:]
-        if i > 0:
-            if word in simple_upper_words:
-                word = simple_upper_words[word]
-            cased_context += " "
-        cased_context += word
-    # Handle ending space in the context
-    if phrase[-1] == ' ':
-        cased_context += " "
-    return cased_context
+    if len(phrase) > 0:
+        # First uppercase the first letter if it is A-Z
+        if 'a' <= phrase[0] <= 'z':
+            phrase = phrase[0].upper() + phrase[1:]
+
+        for key, value in simple_upper_words.items():
+            phrase = phrase.replace(key, value)
+    return phrase
 
 def count_words(phrases: List[str]) -> int:
     """
@@ -253,7 +251,7 @@ def count_words(phrases: List[str]) -> int:
     return count
 
 
-def set_cpu_cores(args):
+def set_cpu_cores(args: Namespace) -> None:
     """
     Optimize settings for CPU or GPU computation
     :param args: Command line arguments passed to main function
@@ -275,7 +273,7 @@ def set_cpu_cores(args):
             set_num_threads(max_useful_cores)
             print(f"Limiting pytorch to {max_useful_cores} cores. You can override with --num-cores but might no speed things up")
 
-def get_device(args):
+def get_device(args: Namespace) -> str:
     """
     Set the computation device string based on the command line switches
     :param args:
@@ -288,7 +286,8 @@ def get_device(args):
         device = "cuda"
     return device
 
-def load_phrases(args, quiet: bool = False) -> List[str]:
+def load_phrases(args: Namespace,
+                 quiet: bool = False) -> List[str]:
     """
     Load the phrases we are going to simulate writing
     :param args: Command line arguments passed to main function
@@ -317,7 +316,7 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
     if not quiet:
         print(f"After filtering: {len(phrases)} phrases, words = {count_words(phrases)}")
     if len(phrases) == 0:
-        print(f"ERROR: All phrases were filtered out!")
+        print(f"ERROR: All phrases were filtered out!", file = stderr)
         exit(1)
 
     # Second phrase is to normalize the text in various ways
@@ -325,8 +324,8 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
                                  lower=args.lower,
                                  strip_symbols=args.strip_symbols,
                                  truncate_max_len=args.truncate_max_len,
-                                 strip_start_end_words=args.strip_start_end_words,
-                                 case_simple=args.case_simple)
+                                 strip_start_end_words=args.strip_start_end_words)
+
     if not quiet:
         print(f"After normalization: {len(phrases)} phrases, words = {count_words(phrases)}")
         print(f"Normalized first phrase: '{phrases[0]}'")
@@ -334,7 +333,7 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
 
     return phrases
 
-def print_startup_info(args) -> None:
+def print_startup_info(args: Namespace) -> None:
     """
     Handy stuff to print out in our log files at the start of a run
     :param args: Command line arguments passed to main function
@@ -344,18 +343,16 @@ def print_startup_info(args) -> None:
     print(f"ARGS: {args}")
     print(f"HOSTNAME: {gethostname()}")
 
-def load_language_model(args,
+def load_language_model(args: Namespace,
                         symbol_set: List[str],
                         device: str,
-                        quiet: bool = False,
-                        normal_space: bool = False) -> LanguageModel:
+                        quiet: bool = False) -> LanguageModel:
     """
     Load one of the language model types shared by all evaluation scripts.
     :param args: Command line arguments passed to main function
     :param symbol_set: List of symbols to send to language model
     :param device: Device to load the model on
     :param quiet: Can be used to supress informational output
-    :param normal_space: Currently byte LLM uses normal space character for keystroke savings, but needs BciPy underscore for perplexity, yuck!
     :return: LanguageModel object, or None if type not supported
     """
     start = timer()
@@ -396,7 +393,7 @@ def load_language_model(args,
         print(f"Model load time = {timer() - start:.2f}")
     return lm
 
-def prep_left_context(args):
+def prep_left_context(args: Namespace) -> None:
     """
     Handles optional left context loading from a file and conversion of space character in provided context
     :param args: Command line arguments passed to main function
@@ -412,7 +409,7 @@ def prep_left_context(args):
                 contents = contents.strip()
                 args.left_context = contents
         except FileNotFoundError:
-            print(f"ERROR: cannot open left context file: {args.left_context_file}!")
+            print(f"ERROR: cannot open left context file: {args.left_context_file}!", file = stderr)
             exit(1)
     elif not args.left_context:
         # Default left context to blank string
@@ -423,7 +420,7 @@ def prep_left_context(args):
 
 def sanity_check_symbols(symbol_set: List[str],
                          phrases: List[str],
-                         predict_lower: bool):
+                         predict_lower: bool) -> None:
     """
     Check all symbols in the phrases are in our symbol set
     :param symbol_set: List of all the symbols we hope to make predictions about
@@ -444,5 +441,5 @@ def sanity_check_symbols(symbol_set: List[str],
             bad_symbols.append(symbol)
     if len(bad_symbols) > 0:
         bad_symbols.sort()
-        print(f"ERROR: characters in phrases not in symbol set: {bad_symbols}")
+        print(f"ERROR: characters in phrases not in symbol set: {bad_symbols}!", file = stderr)
         exit(1)

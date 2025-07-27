@@ -5,22 +5,21 @@
 #  2) ByGPT5 byte tokenized LLM, via Hugging Face plus uniformers library
 
 from timeit import default_timer as timer
-import argparse
+from argparse import ArgumentParser
 from datetime import datetime
 from socket import gethostname
-from sys import exit
-from sys import stdout
-import os
+from sys import exit, stderr, stdout
+from fcntl import flock, LOCK_UN, LOCK_EX
+from os import path
 import eval_helper
-import fcntl
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
     eval_helper.add_args(parser)
     parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
-    parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis")
-    parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
+    parser.add_argument("--beam", type=float, help="For pruning word prediction search, log prob difference versus best completed hypothesis")
+    parser.add_argument("--beam-max", type=int, help="For pruning word prediction search, max number of hypotheses to track per extension of search")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
@@ -28,10 +27,10 @@ if __name__ == "__main__":
 
     # Check for a variety of invalid command line switch combinations
     if sum([args.ngram, args.causal, args.byte]) != 1:
-        print(f"ERROR: Exactly one of --ngram, --causal, --byte must be specified!")
+        print(f"ERROR: Exactly one of --ngram, --causal, --byte must be specified!", file = stderr)
         exit(1)
     if (args.causal or args.byte) and not args.model_name:
-        print(f"ERROR: Transformer model must be specified with --model-name!")
+        print(f"ERROR: Transformer model must be specified with --model-name!", file = stderr)
         exit(1)
     eval_helper.check_args_for_errors(args)
     eval_helper.check_args_for_warnings(args)
@@ -55,8 +54,7 @@ if __name__ == "__main__":
     start = timer()
     lm = eval_helper.load_language_model(args=args,
                                          symbol_set=symbol_set,
-                                         device=device,
-                                         normal_space=True)
+                                         device=device)
 
     total_chars = 0
     total_keystrokes = 0
@@ -73,6 +71,11 @@ if __name__ == "__main__":
             phrase_len += 1
 
         total_chars += phrase_len
+
+        # In the case of simple automatic casing, we want to start with lowercase text
+        # and then try and recover case in the left context as it is generated
+        if args.case_simple:
+            phrase = phrase.lower()
 
         print(f"*** Phrase {i}: {phrase}")
         j = 0
@@ -108,12 +111,21 @@ if __name__ == "__main__":
             nbest = args.nbest
             if use_literal:
                 nbest -= 1
-            words = lm.predict_words(left_context=current_left_context,
+
+            # Optionally automatically try and fix case in lowercase phrases
+            context_to_use = current_left_context
+            if args.case_simple:
+                context_to_use = eval_helper.case_simple(current_left_context)
+                print(f"context = '{current_left_context}', case simple = '{context_to_use}'")
+
+            words = lm.predict_words(left_context=context_to_use,
                                      nbest=nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols)
+
             # Add the literal text type as the final slot
+            # TODO: test this, it seems like it should be limited to last word
             if use_literal:
                 words.append(current_left_context)
 
@@ -157,11 +169,11 @@ if __name__ == "__main__":
 
     # Optional output of a tab-delimited file for easy tracking of results over multiple experiments
     if args.out_stats:
-        if not os.path.exists(args.out_stats):
+        if not path.exists(args.out_stats):
             # New file, write a header line
             file = open(args.out_stats, "w")
             # We may run this script in parallel so try and prevent writing to the stats file at the same time
-            fcntl.flock(file, fcntl.LOCK_EX)
+            flock(file, LOCK_EX)
             file.write(f"final_ks"
                        f"\tphrases"
                        f"\ttotal_words"
@@ -180,7 +192,7 @@ if __name__ == "__main__":
             file.write("\n")
         else:
             file = open(args.out_stats, "a")
-            fcntl.flock(file, fcntl.LOCK_EX)
+            flock(file, LOCK_EX)
 
         file.write(f"{final_ks:.6f}"
                    f"\t{len(phrases)}"
@@ -198,5 +210,5 @@ if __name__ == "__main__":
                 extra_col_val = extra.split(",")[1]
                 file.write(f"\t{extra_col_val}")
         file.write("\n")
-        fcntl.flock(file, fcntl.LOCK_UN)
+        flock(file, LOCK_UN)
         file.close()

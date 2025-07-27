@@ -14,29 +14,25 @@ from mixture import MixtureLanguageModel
 from classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
-import argparse
+from argparse import ArgumentParser
 import json
 import numpy as np
-from sys import exit
-from sys import stdout
+from sys import exit, stderr, stdout
 from scipy.stats import bootstrap
 from datetime import datetime
 from os import path
-from language_model import SPACE_CHAR
-from language_model import alphabet
+from fcntl import flock, LOCK_UN, LOCK_EX
 import eval_helper
-import fcntl
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
     eval_helper.add_args(parser)
     parser.add_argument("--verbose", type=int, default=0, help="0: Only output model averages\n1: Output results from each phrase\n2: Output results from each character")
     parser.add_argument("--classifier", action="store_true", help="Use classifier model")
     parser.add_argument("--mix", action="store_true", help="Use mixture of n-gram and subword LLM")
     parser.add_argument("--mix-byte", action="store_true", help="Use mixture of n-gram and byte LLM")
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="Weight for n-gram in mixture model")
-#    parser.add_argument("--add-char", action="append", dest="extra_chars", help="Add character to symbol set")
     parser.add_argument("--time-outliers", action="store_true", help="Print time outliers at end")
     parser.add_argument("--beam-width", type=int, help="Search beam width for causal LM, recommended value = 8")
     parser.add_argument("--max-completed", type=int, help="Stop causal LM search after this many completed hypotheses, recommended value = 32000")
@@ -51,13 +47,13 @@ if __name__ == "__main__":
 
     # Check for various invalid combinations of command line options
     if sum([args.ngram, args.causal, args.byte, args.classifier, args.mix, args.mix_byte]) != 1:
-        print(f"ERROR: Exactly one of --ngram --causal, --mix, --mix-byte, --byte, --classifier must be specified!")
+        print(f"ERROR: Exactly one of --ngram --causal, --mix, --mix-byte, --byte, --classifier must be specified!", file = stderr)
         exit(1)
     if (args.causal or args.byte or args.classifier or args.mix or args.mix_byte) and not args.model_name:
-        print(f"ERROR: Transformer model must be specified with --model-name!")
+        print(f"ERROR: Transformer model must be specified with --model-name!", file = stderr)
         exit(1)
     if (args.mix or args.mix_byte) and not args.ngram_lm:
-        print(f"ERROR: Mixture model requires n-gram model to be specified with --ngram-lm!")
+        print(f"ERROR: Mixture model requires n-gram model to be specified with --ngram-lm!", file = stderr)
         exit(1)
     eval_helper.check_args_for_errors(args)
     eval_helper.check_args_for_warnings(args)
@@ -105,8 +101,6 @@ if __name__ == "__main__":
                                              "lm_left_context": args.left_context,
                                              "beam_width": args.beam_width,
                                              "fp16": args.fp16,
-                                             "mixed_case_context": args.mixed_case_context,
-                                             "case_simple": args.case_simple,
                                              "max_completed": args.max_completed,
                                             },
                                             {"lm_path": args.ngram_lm}])
@@ -121,7 +115,6 @@ if __name__ == "__main__":
                                              "lm_path": args.model_dir,
                                              "lm_left_context": args.left_context,
                                              "fp16": args.fp16,
-                                             "case_simple": args.case_simple,
                                             },
                                             {"lm_path": args.ngram_lm}])
         print(f"Model load time = {timer() - start:.2f}")
@@ -134,8 +127,7 @@ if __name__ == "__main__":
                                      lm_left_context=args.left_context,
                                      beam_width=args.beam_width,
                                      fp16=args.fp16,
-                                     mixed_case_context=args.mixed_case_context,
-                                     case_simple=args.case_simple)
+                                     mixed_case_context=args.mixed_case_context)
         print(f"Model load time = {timer() - start:.2f}")
     else:
         lm = eval_helper.load_language_model(args=args,
@@ -161,6 +153,11 @@ if __name__ == "__main__":
         symbols = 0
         accum = 0.0
         sent_ppl = 0.0
+
+        # In the case of simple automatic casing, we want to start with lowercase text
+        # and then try and recover case in the left context as it is generated
+        if args.case_simple:
+            phrase = phrase.lower()
 
         # Phrase-level output
         if args.verbose >= 1:
@@ -207,7 +204,13 @@ if __name__ == "__main__":
             token_display = token_to_predict.replace(" ", args.space_symbol)
 
             score = 0.0
-            next_char_pred = lm.state_update(list(context))
+
+            context_to_use = context
+            if args.case_simple:
+                context_to_use = eval_helper.case_simple(context)
+                if args.verbose >= 2:
+                    print(f"context = '{context}', case simple = '{context_to_use}'")
+            next_char_pred = lm.state_update(list(context_to_use))
 
             predict_time = timer() - start_predict
             predict_time_arr = np.append(predict_time_arr, predict_time)
@@ -398,7 +401,7 @@ if __name__ == "__main__":
         exists = path.isfile(args.out_stats)
         with open(args.out_stats, 'a') as file:
             # We may run this script in parallel so try and prevent writing to the stats file at the same time
-            fcntl.flock(file, fcntl.LOCK_EX)
+            flock(file, LOCK_EX)
             if not exists:
                 # Header if the stats file doesn't already exist
                 file.write(f"ppl"
@@ -442,7 +445,7 @@ if __name__ == "__main__":
                     extra_col_val = extra.split(",")[1]
                     file.write(f"\t{extra_col_val}")
             file.write("\n")
-            fcntl.flock(file, fcntl.LOCK_UN)
+            flock(file, LOCK_UN)
 
     # Prediction timing stats for the causal LLM
     if args.causal or args.mix:
