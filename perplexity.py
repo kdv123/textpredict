@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
         # Phrase-level output
         if args.verbose >= 1:
-            print(f"*** Phrase {i}: {phrase}")
+            print(f"*** Phrase {i + 1}: {phrase}")
 
         # Split into a list of characters and convert spaces to pseudo-word
         tokens = [char for char in phrase]
@@ -205,11 +205,15 @@ if __name__ == "__main__":
 
             score = 0.0
 
+            # Optionally automatically try and fix case in lowercase phrases
             context_to_use = context
             if args.case_simple:
                 context_to_use = eval_helper.case_simple(context)
                 if args.verbose >= 2:
                     print(f"context = '{context}', case simple = '{context_to_use}'")
+            elif args.verbose >= 2:
+                print(f"context = '{context}'")
+
             next_char_pred = lm.state_update(list(context_to_use))
 
             predict_time = timer() - start_predict

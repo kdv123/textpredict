@@ -77,7 +77,7 @@ if __name__ == "__main__":
         if args.case_simple:
             phrase = phrase.lower()
 
-        print(f"*** Phrase {i}: {phrase}")
+        print(f"*** Phrase {i + 1}: {phrase}")
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
@@ -108,36 +108,43 @@ if __name__ == "__main__":
 
             # Adjust to one less prediction if using literal slot and not at the start of a word
             use_literal = args.literal_slot and len(current_left_context) > 0 and current_left_context[-1] != " "
-            nbest = args.nbest
-            if use_literal:
-                nbest -= 1
 
             # Optionally automatically try and fix case in lowercase phrases
             context_to_use = current_left_context
             if args.case_simple:
                 context_to_use = eval_helper.case_simple(current_left_context)
                 print(f"context = '{current_left_context}', case simple = '{context_to_use}'")
+            else:
+                print(f"context = '{current_left_context}'")
 
             words = lm.predict_words(left_context=context_to_use,
-                                     nbest=nbest,
+                                     nbest=args.nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols)
 
             # Add the literal text type as the final slot
-            # TODO: test this, it seems like it should be limited to last word
+            # But not if it already appears in the n-best results
+            # If the n-best result is at maximum size, remove the least probable to make space for literal slot
             if use_literal:
-                words.append(current_left_context)
+                space_pos = current_left_context.rfind(" ")
+                if space_pos != -1:
+                    literal = current_left_context[space_pos + 1:]
+                else:
+                    literal = current_left_context
+                if literal not in words:
+                    if len(words) == args.nbest:
+                        words[-1] = literal
 
             total_predictions += 1
             phrase_predictions += 1
             print_words = ""
-            for word in words:
+            for k, word in enumerate(words):
                 if word == target_word:
-                    print_words += f" {word.upper()}"
+                    print_words += f"{k}:{word.upper()}, "
                 else:
-                    print_words += f" {word}"
-            print(f" predictions:{print_words}, left '{current_left_context}', target '{target_word}', keys {phrase_keystrokes}")
+                    print_words += f"{k}:{word}, "
+            print(f" predictions {print_words} left '{current_left_context}', target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
