@@ -306,6 +306,8 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
                                                    limit_val=args.dataset_limit_val)
     if not quiet:
         print(f"Loaded {len(phrases)} phrases, words = {count_words(phrases)}")
+        print(f"First phrase: '{phrases[0]}'")
+        print(f"Last phrase: '{phrases[-1]}'")
 
     # First phrase is to potentially get rid of some phrases
     phrases = _filter_phrases(phrases=phrases,
@@ -327,6 +329,9 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
                                  case_simple=args.case_simple)
     if not quiet:
         print(f"After normalization: {len(phrases)} phrases, words = {count_words(phrases)}")
+        print(f"Normalized first phrase: '{phrases[0]}'")
+        print(f"Normalized last phrase: '{phrases[-1]}'")
+
     return phrases
 
 def print_startup_info(args) -> None:
