@@ -3,9 +3,7 @@
 # Supports the following types of language models:
 #  1) n-gram character, via KenLM library
 #  2) ByGPT5 byte tokenized LLM, via Hugging Face plus uniformers library
-from eval_helper import load_language_model
-from ngram import NGramLanguageModel
-from causal_byte import CausalByteLanguageModel
+
 from timeit import default_timer as timer
 import argparse
 from datetime import datetime
@@ -23,7 +21,6 @@ if __name__ == "__main__":
     parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
     parser.add_argument("--beam", type=float, help="For pruning search, log prob difference versus best completed hypothesis")
     parser.add_argument("--beam-max", type=int, help="For pruning search, max number of hypotheses to track per extension of search")
-    parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols in predicted words")
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
@@ -48,15 +45,19 @@ if __name__ == "__main__":
     print(f"Prediction left context: '{args.left_context}'")
     stdout.flush()
 
-    start = timer()
     symbol_set = list(args.symbols)
     print(f"Symbols, size {len(symbol_set)}: {symbol_set}")
     print(f"Word end symbols: {args.word_end_symbols}")
+    eval_helper.sanity_check_symbols(symbol_set = symbol_set,
+                                     phrases = phrases,
+                                     predict_lower= args.predict_lower)
 
+    start = timer()
     lm = eval_helper.load_language_model(args=args,
                                          symbol_set=symbol_set,
                                          device=device,
                                          normal_space=True)
+
     total_chars = 0
     total_keystrokes = 0
     total_truncated = 0
@@ -97,6 +98,10 @@ if __name__ == "__main__":
             while k < len(phrase) and phrase[k] != " ":
                 target_word += phrase[k]
                 k += 1
+
+            # We may have mixed case phrases and want to match a lowercase predicted word
+            if args.predict_lower:
+                target_word = target_word.lower()
 
             # Adjust to one less prediction if using literal slot and not at the start of a word
             use_literal = args.literal_slot and len(current_left_context) > 0 and current_left_context[-1] != " "

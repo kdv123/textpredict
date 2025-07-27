@@ -1,7 +1,6 @@
 from collections import Counter
 from typing import Optional, List, Tuple, Final
 from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
@@ -202,10 +201,11 @@ class NGramLanguageModel(LanguageModel):
         if len(context) >= self.model.order:
             context = context[-(self.model.order-1):]
 
-        evidence_str = ''.join(context).lower()
+        evidence_str = ''.join(context)
 
         for i, ch in enumerate(context):
-            if ch == SPACE_CHAR:
+            # Replace spaces with whatever the n-gram model uses for a space
+            if ch == " ":
                 context[i] = self.space_symbol
 
         self.model.BeginSentenceWrite(self.state)
@@ -213,9 +213,9 @@ class NGramLanguageModel(LanguageModel):
         # Update the state one token at a time based on evidence, alternate states
         for i, token in enumerate(context):
             if i % 2 == 0:
-                score = self.model.BaseScore(self.state, token.lower(), self.state2)
+                score = self.model.BaseScore(self.state, token, self.state2)
             else:
-                self.model.BaseScore(self.state2, token.lower(), self.state)
+                self.model.BaseScore(self.state2, token, self.state)
 
         next_char_pred = None
 
@@ -273,16 +273,14 @@ class NGramLanguageModel(LanguageModel):
         temp_state = kenlm.State()
 
         for char in self.symbol_set:
-            # Backspace probability under the LM is 0
-            if char != BACKSPACE_CHAR:
-                # Replace the space character to whatever symbol is used in the n-gram model, e.g. "<sp>"
-                if char == SPACE_CHAR:
-                    score = self.model.BaseScore(state, self.space_symbol, temp_state)
-                else:
-                    score = self.model.BaseScore(state, char.lower(), temp_state)
+            # Replace the space character to whatever symbol is used in the n-gram model, e.g. "<sp>"
+            if char == " ":
+                score = self.model.BaseScore(state, self.space_symbol, temp_state)
+            else:
+                score = self.model.BaseScore(state, char, temp_state)
 
-                # BaseScore returns log probs, convert by putting 10 to its power
-                next_char_pred[char] = pow(10, score)
+            # BaseScore returns log probs, convert by putting 10 to its power
+            next_char_pred[char] = pow(10, score)
 
         # We can optionally disable normalization over our symbol set
         # This is useful if we want to compare against SRILM with a LM with a larger vocab

@@ -5,7 +5,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import itertools
 import heapq
 from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -25,8 +24,6 @@ class CausalLanguageModel(LanguageModel):
                  lm_left_context: str = "",
                  beam_width: int = None,
                  fp16: bool = False,
-                 mixed_case_context: bool = False,
-                 case_simple: bool = False,
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
@@ -41,8 +38,6 @@ class CausalLanguageModel(LanguageModel):
             lm_left_context    - text to condition start of sentence on
             beam_width         - how many hypotheses to keep during the search, None=off
             fp16               - convert model to fp16 to save memory/compute on CUDA
-            mixed_case_context - use mixed case for language model left context
-            case_simple        - simple fixing of left context case
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
             lora               - use LoRA adapter
             lora_path          - load LoRA adapter from Hugging Face or local directory
@@ -60,8 +55,6 @@ class CausalLanguageModel(LanguageModel):
         self.device = lm_device
         self.left_context = lm_left_context
         self.fp16 = fp16
-        self.mixed_case_context = mixed_case_context
-        self.case_simple = case_simple
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
@@ -87,13 +80,6 @@ class CausalLanguageModel(LanguageModel):
 
         # Parameters for the search
         self.beam_width = beam_width
-
-        # Simple heuristic to correct case in the LM context
-        self.simple_upper_words = {"i": "I",
-                                    "i'll": "I'll",
-                                    "i've": "I've",
-                                    "i'd": "I'd",
-                                    "i'm": "I'm"}
 
         # Track how much time spent in different parts of the predict function
         self.predict_total_ns = 0
@@ -121,13 +107,7 @@ class CausalLanguageModel(LanguageModel):
             # Check if all the characters in the subword token are in our valid symbol set
             valid = True
             for ch in word_lower:
-                # The space char is only valid once we convert spaces to the space char
-                if ch == SPACE_CHAR:
-                    valid = False
-                    break
-                if ch == ' ':
-                    continue
-                elif ch not in self.symbol_set_lower:
+                if ch not in self.symbol_set_lower:
                     valid = False
                     break
 
@@ -136,7 +116,7 @@ class CausalLanguageModel(LanguageModel):
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
                 for j in range(len(word)):
-                    key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
+                    key = word_lower[0:j + 1]
                     self.vocab[key] += i,
                     # Construct set for prefix of the word
                     self.vocab_set[key].add(i)
@@ -221,45 +201,20 @@ class CausalLanguageModel(LanguageModel):
 
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
-        context = converted_context.replace(SPACE_CHAR, ' ')
-
-        # If using the simple case feature, we need to go through the actual
-        # left context and capitalize the first letter in the sentence as
-        # well as any word in our list of words that should be capitalized.
-        if self.case_simple and len(context) > 0:
-            cased_context = ""
-            words = context.split()
-            for i, word in enumerate(words):
-                if i == 0 and word[0] >= 'a' and word[0] <= 'z':
-                    word = word[0].upper() + word[1:]
-                if i > 0:
-                    if word in self.simple_upper_words:
-                        word = self.simple_upper_words[word]
-                    cased_context += " "
-                cased_context += word
-            # Handle ending space in the context
-            if context[-1] == ' ':
-                cased_context += " "
-            context = cased_context
-
-        context_lower = context.lower()
+        context = converted_context
 
         # Index in the hypothesis string that is the next character after our context
-        target_pos = len(context_lower)
+        target_pos = len(context)
 
         # For stats purposes track length of the prefix we are extending from space to match
         # prefix_len = target_pos
 
         # Look for the last space in the context, or -1 if no begin_text in context yet
-        pos = context_lower.rfind(" ")
+        pos = context.rfind(" ")
         tokens = []
         tokens.extend(self.left_context_tokens)
         if pos >= 0:
-            # Optionally, we condition on upper and lower case left context
-            if self.mixed_case_context:
-                truncated_context = context[0:pos]
-            else:
-                truncated_context = context_lower[0:pos]
+            truncated_context = context[0:pos]
             tokens.extend(self._encode(truncated_context))
 
         # Constant indexes for use with the hypotheses tuples
@@ -347,7 +302,7 @@ class CausalLanguageModel(LanguageModel):
                     # We may need to use a subword token that doesn't completely consume the remaining text.
                     # Find these by tokenizing all possible lengths of text starting from the current position.
                     for i in range(1, len(remaining_context)):
-                        tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
+                        tokenization = self._encode(context[current[LEN]:current[LEN] + i])
                         # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
                         if len(tokenization) == 1:
                             #extra_vocab += tokenization[0],
@@ -404,11 +359,7 @@ class CausalLanguageModel(LanguageModel):
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
         for ch in self.symbol_set_lower:
-            # Convert space to the underscore used in BciPy
-            if ch == SPACE_CHAR:
-                target_ch = ' '
-            else:
-                target_ch = ch
+            target_ch = ch
 
             # Handle cases when symbols are never seen
             if target_ch in char_to_log_probs:
@@ -421,11 +372,7 @@ class CausalLanguageModel(LanguageModel):
 
         next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
-        next_char_pred[BACKSPACE_CHAR] = 0.0
+            next_char_pred[ch] = char_probs[i]
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
@@ -480,12 +427,7 @@ class CausalLanguageModel(LanguageModel):
         self.symbol_set_lower = []
 
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
-            else:
-                self.symbol_set_lower.append(ch.lower())
+            self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
 

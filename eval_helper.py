@@ -53,8 +53,9 @@ def add_args(parser):
     parser.add_argument("--skip-norm", action="store_true", default=False, help="Skip normalization over symbols for n-gram model, for matching SRILM output when using LM with extra symbols")
     parser.add_argument("--left-context", help="Left language model context for transformer models")
     parser.add_argument("--left-context-file", help="File with left language model context for transformer model")
-    parser.add_argument("--mixed-case-context", action="store_true", default=False, help="Use mixed case left context")
-    parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
+    parser.add_argument("--case-simple", action="store_true", default=False, help="Lowercase then simple automatic casing of phrases")
+    parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Symbols we make predictions over")
+    parser.add_argument("--predict-lower", action="store_true", default=False, help="Prediction of lowercase characters only")
 
 def check_args_for_errors(args):
     """
@@ -89,6 +90,9 @@ def check_args_for_errors(args):
     if args.left_context and args.left_context_file:
         print("ERROR: Only one of --left-context or --left-context-file can be specified!")
         exit(1)
+    if args.lower and args.case_simple:
+        print("ERROR: Only one of --lower and --case-simple should be specified!")
+        exit(1)
 
 def check_args_for_warnings(args):
     """
@@ -97,8 +101,8 @@ def check_args_for_warnings(args):
     :return:
     """
     # Check for settings that are suspicious but don't result in termination
-    if args.case_simple and not args.mixed_case_context:
-        print(f"WARNING: You should probably also set --mixed-case-context with --case-simple")
+    if args.ngram and not args.lower:
+        print(f"WARNING: Unless you have a mixed case n-gram model, you should set --lower")
 
 def _load_phrases_plaintext(filename: str,
                            phrase_limit: int = None) -> List[str]:
@@ -173,13 +177,16 @@ def _normalize_phrases(phrases: List[str],
                        lower: bool = False,
                        strip_symbols: bool = False,
                        truncate_max_len: int = None,
-                       strip_start_end_words: bool = False) -> List[str]:
+                       strip_start_end_words: bool = False,
+                       case_simple: bool = False) -> List[str]:
     """
     Perform text normalization on the phrases
     :param phrases: Original list of all the phrases
     :param lower: Lowercase all phrases
     :param strip_symbols: Converts characters besides A-Z and apostrophe to space then collapses contiguous whitespace
     :param truncate_max_len: Truncate any phrase with this many characters
+    :param strip_start_end_words: Strip the start and end words <s> and </s>
+    :param case_simple: Lowercase then do simple casing heuristic
     :return: List of phrases
     """
     result = []
@@ -199,10 +206,40 @@ def _normalize_phrases(phrases: List[str],
         if strip_symbols:
             phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
             phrase = re.sub(r'\s+', ' ', phrase).strip()
+        if case_simple:
+            phrase = _case_simple(phrase)
         # It could be the case we normalized it to be blank
         if len(phrase) > 0:
             result.append(phrase)
     return result
+
+def _case_simple(phrase: str) -> str:
+    """
+    Handles the optional simple heuristic based casing of phrases
+    We first lowercase the text, then use simple rules to add cas back
+    :param phrase: the existing left context
+    :return: the simple cased version of the left context (or original if not enabled)
+    """
+    simple_upper_words = {"i": "I",
+                          "i'll": "I'll",
+                          "i've": "I've",
+                          "i'd": "I'd",
+                          "i'm": "I'm"}
+    cased_context = ""
+    phrase = phrase.lower()
+    words = phrase.split()
+    for i, word in enumerate(words):
+        if i == 0 and word[0] >= 'a' and word[0] <= 'z':
+            word = word[0].upper() + word[1:]
+        if i > 0:
+            if word in simple_upper_words:
+                word = simple_upper_words[word]
+            cased_context += " "
+        cased_context += word
+    # Handle ending space in the context
+    if phrase[-1] == ' ':
+        cased_context += " "
+    return cased_context
 
 def count_words(phrases: List[str]) -> int:
     """
@@ -286,7 +323,8 @@ def load_phrases(args, quiet: bool = False) -> List[str]:
                                  lower=args.lower,
                                  strip_symbols=args.strip_symbols,
                                  truncate_max_len=args.truncate_max_len,
-                                 strip_start_end_words=args.strip_start_end_words)
+                                 strip_start_end_words=args.strip_start_end_words,
+                                 case_simple=args.case_simple)
     if not quiet:
         print(f"After normalization: {len(phrases)} phrases, words = {count_words(phrases)}")
     return phrases
@@ -334,9 +372,7 @@ def load_language_model(args,
                                      lm_path=args.model_dir,
                                      lm_left_context=args.left_context,
                                      fp16=args.fp16,
-                                     mixed_case_context=args.mixed_case_context,
-                                     case_simple=args.case_simple,
-                                     normal_space=normal_space)
+                                     case_simple=args.case_simple)
     elif args.causal:
         if not quiet:
             print(f"Loading causal LLM: {args.model_name}, model directory {args.model_dir}")
@@ -347,8 +383,6 @@ def load_language_model(args,
                                  lm_left_context=args.left_context,
                                  beam_width=args.beam_width,
                                  fp16=args.fp16,
-                                 mixed_case_context=args.mixed_case_context,
-                                 case_simple=args.case_simple,
                                  max_completed=args.max_completed,
                                  lora=args.lora,
                                  lora_path=args.lora_path)
@@ -381,3 +415,29 @@ def prep_left_context(args):
 
     # Allow passing in of space characters in the context using the space pseudo-word
     args.left_context = args.left_context.replace(args.space_symbol, " ")
+
+def sanity_check_symbols(symbol_set: List[str],
+                         phrases: List[str],
+                         predict_lower: bool):
+    """
+    Check all symbols in the phrases are in our symbol set
+    :param symbol_set: List of all the symbols we hope to make predictions about
+    :param phrases: List of all phrases we are evaluating on
+    :param predict_lower: Whether we are always predicting lowercase even if phrases are mixed case
+    :return:
+    """
+    all_phrase_symbols = set()
+    for phrase in phrases:
+        for ch in phrase:
+            all_phrase_symbols.add(ch)
+    bad_symbols = []
+    for symbol in all_phrase_symbols:
+        # If predictions are always lowercase then we can allow uppercase letters
+        if predict_lower:
+            symbol = symbol.lower()
+        if symbol not in symbol_set:
+            bad_symbols.append(symbol)
+    if len(bad_symbols) > 0:
+        bad_symbols.sort()
+        print(f"ERROR: characters in phrases not in symbol set: {bad_symbols}")
+        exit(1)

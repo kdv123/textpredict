@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--mix", action="store_true", help="Use mixture of n-gram and subword LLM")
     parser.add_argument("--mix-byte", action="store_true", help="Use mixture of n-gram and byte LLM")
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="Weight for n-gram in mixture model")
-    parser.add_argument("--add-char", action="append", dest="extra_chars", help="Add character to symbol set")
+#    parser.add_argument("--add-char", action="append", dest="extra_chars", help="Add character to symbol set")
     parser.add_argument("--time-outliers", action="store_true", help="Print time outliers at end")
     parser.add_argument("--beam-width", type=int, help="Search beam width for causal LM, recommended value = 8")
     parser.add_argument("--max-completed", type=int, help="Stop causal LM search after this many completed hypotheses, recommended value = 32000")
@@ -71,6 +71,12 @@ if __name__ == "__main__":
     print(f"Prediction left context: '{args.left_context}'")
     stdout.flush()
 
+    symbol_set = list(args.symbols)
+    print(f"Symbols, size {len(symbol_set)}: {symbol_set}")
+    eval_helper.sanity_check_symbols(symbol_set = symbol_set,
+                                     phrases = phrases,
+                                     predict_lower = args.predict_lower)
+
     rng = np.random.default_rng(234893458942534)
 
     lm = None
@@ -86,12 +92,6 @@ if __name__ == "__main__":
         srilm_file = open(args.srilm_file, "w")
 
     start = timer()
-
-    symbol_set = alphabet()
-    if args.extra_chars:
-        for char in args.extra_chars:
-            symbol_set += char
-        print(f"Modified symbol_set: {symbol_set}")
 
     # Some language models are only supported by the perplexity evaluation script
     if args.mix:
@@ -121,7 +121,6 @@ if __name__ == "__main__":
                                              "lm_path": args.model_dir,
                                              "lm_left_context": args.left_context,
                                              "fp16": args.fp16,
-                                             "mixed_case_context": args.mixed_case_context,
                                              "case_simple": args.case_simple,
                                             },
                                             {"lm_path": args.ngram_lm}])
@@ -168,11 +167,11 @@ if __name__ == "__main__":
             print(f"*** Phrase {i}: {phrase}")
 
         # Split into a list of characters and convert spaces to pseudo-word
-        tokens = [args.space_symbol if char == " " else char for char in phrase]
+        tokens = [char for char in phrase]
 
         # Optionally skip symbols not in our set
         if args.skip_oov_symbols:
-            tokens_stripped = [token for token in tokens if token.upper() in symbol_set or token == args.space_symbol]
+            tokens_stripped = [token for token in tokens if token in symbol_set]
             skipped_symbols += len(tokens) - len(tokens_stripped)
             tokens = tokens_stripped
 
@@ -183,11 +182,12 @@ if __name__ == "__main__":
             for (i, symbol) in enumerate(tokens):
                 if i > 0:
                     srilm_file.write(" ")
-                srilm_file.write(symbol.replace("_", args.space_symbol))
+                srilm_file.write(symbol)
             srilm_file.write("\n")
 
         # Initial previous token is the start symbol, initial context empty
         prev_token = "<s>"
+        prev_token_display = prev_token
         context = ""
 
         predict_time_arr = np.array([])
@@ -196,29 +196,31 @@ if __name__ == "__main__":
         # Iterate over characters in phrase
         for (i, token) in enumerate(tokens):
             start_predict = timer()
-            correct_char = ""
 
-            # BciPy treats space as underscore
-            if token == args.space_symbol:
-                token = SPACE_CHAR
-                correct_char = SPACE_CHAR
+            # Even if the LM supports mixed case we may want to predict only lowercase
+            if args.predict_lower:
+                token_to_predict = token.lower()
             else:
-                correct_char = token.upper()
+                token_to_predict = token
+
+            # Use the space pseudo-word for display of the space character
+            token_display = token_to_predict.replace(" ", args.space_symbol)
+
             score = 0.0
             next_char_pred = lm.state_update(list(context))
 
             predict_time = timer() - start_predict
             predict_time_arr = np.append(predict_time_arr, predict_time)
             predict_details_arr = np.append(predict_details_arr,
-                                            f"sentence = {phrase}, index = {i}, p( {token} | {prev_token} )")
+                                            f"sentence = {phrase}, index = {i}, p( {token_display} | {prev_token_display} )")
 
             # Find the probability for the correct character
-            p = next_char_pred[[c[0] for c in next_char_pred].index(correct_char)][1]
+            p = next_char_pred[[c[0] for c in next_char_pred].index(token_to_predict)][1]
             if p == 0:
                 zero_prob += 1
                 accum = 1
                 if args.verbose >= 2:
-                    print(f"p( {token} | {prev_token} ...) = 0")
+                    print(f"p( {token_display} | {prev_token_display} ...) = 0")
                     print(f"prediction time = {predict_time:.6f}")
                 break
             else:
@@ -226,7 +228,7 @@ if __name__ == "__main__":
 
                 # Character-level output
                 if args.verbose >= 2:
-                    print(f"p( {token} | {prev_token} ...) = {p:.6f} [ {score:.6f} ]")
+                    print(f"p( {token_display} | {prev_token_display} ...) = {p:.6f} [ {score:.6f} ]")
                     print(f"prediction time = {predict_time:.6f}")
 
             # SRILM line for a character looks like: "	p( w | <s> ) 	= [2gram] 0.095760 [ -1.018816 ]"
@@ -235,12 +237,14 @@ if __name__ == "__main__":
                 if i > 0:
                     extra = " ..."
                 # The 1gram bit is only relevant for the n-gram, we'll just hard code to 1gram for everything
-                srilm_file.write(f"\tp( {token.replace('_', args.space_symbol)} | {prev_token.replace('_', args.space_symbol)}{extra}) \t= [1gram] {p:.6f} [ {score:.6f} ]\n")
+                srilm_file.write(f"\tp( {token_display} | {prev_token_display}{extra}) \t= [1gram] {p:.6f} [ {score:.6f} ]\n")
 
             accum += score
-            prev_token = token
+            prev_token_display = token_display
+
             context += token
             all_symbol_log_probs.append(score)
+            stdout.flush()
 
         # Compute summary stats on prediction times for this phrase
         per_symbol_time = np.average(predict_time_arr)

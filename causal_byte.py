@@ -4,7 +4,6 @@ from numpy import ndarray
 from numpy import sum
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -27,9 +26,7 @@ class CausalByteLanguageModel(LanguageModel):
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
                  fp16: bool = False,
-                 mixed_case_context: bool = False,
                  case_simple: bool = False,
-                 normal_space: bool = False,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -41,9 +38,7 @@ class CausalByteLanguageModel(LanguageModel):
             lm_device          - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context    - text to condition start of sentence on
             fp16               - convert model to fp16 to save memory/compute on CUDA
-            mixed_case_context - use mixed case for language model left context
             case_simple        - simple fixing of left context case
-            normal_space       - use normal space character instead of BciPy underscore
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -57,9 +52,7 @@ class CausalByteLanguageModel(LanguageModel):
         self.device = lm_device
         self.left_context = lm_left_context
         self.fp16 = fp16
-        self.mixed_case_context = mixed_case_context
         self.case_simple = case_simple
-        self.normal_space = normal_space
         self.symbol_index_to_vocab_index = []
 
         # Taken from: https://github.com/potamides/uniformers/blob/main/examples/inference/lm_perplexity.py
@@ -76,11 +69,6 @@ class CausalByteLanguageModel(LanguageModel):
         self.model_name = lang_model_name
         self.model_dir = lm_path if lm_path else self.model_name
 
-        self.simple_upper_words = {"i": "I",
-                                    "i'll": "I'll",
-                                    "i've": "I've",
-                                    "i'd": "I'd",
-                                    "i'm": "I'm"}
         self.load()
 
     def _build_vocab(self) -> None:
@@ -97,13 +85,10 @@ class CausalByteLanguageModel(LanguageModel):
             word_lower = word.lower()
             self.index_to_word[i] = word
             self.index_to_word_lower[i] = word_lower
+
             # Create a mapping between the vocab index and the index in the result set
             try:
-                # Special case for space
-                if word == " " and not self.normal_space:
-                    self.result_to_vocab_indexes[self.symbol_set_lower.index(SPACE_CHAR)].append(i)
-                elif word != SPACE_CHAR:
-                    self.result_to_vocab_indexes[self.symbol_set_lower.index(word_lower)].append(i)
+                self.result_to_vocab_indexes[self.symbol_set_lower.index(word_lower)].append(i)
             except ValueError:
                 pass
 
@@ -128,30 +113,6 @@ class CausalByteLanguageModel(LanguageModel):
             # Some models always add </s> at end
             tokens = tokens[:-1]
         return tokens
-
-    def _simple_case(self, context: str) -> str:
-        """
-        Handles the optional simple heuristic based casing of lowercase left context
-        :param context: the existing left context
-        :return: the simple cased version of the left context (or original if not enabled)
-        """
-        if self.case_simple and len(context) > 0:
-            cased_context = ""
-            words = context.split()
-            for i, word in enumerate(words):
-                if i == 0 and word[0] >= 'a' and word[0] <= 'z':
-                    word = word[0].upper() + word[1:]
-                if i > 0:
-                    if word in self.simple_upper_words:
-                        word = self.simple_upper_words[word]
-                    cased_context += " "
-                cased_context += word
-            # Handle ending space in the context
-            if context[-1] == ' ':
-                cased_context += " "
-            return cased_context
-        else:
-            return context
 
     def _get_symbol_log_probs(self, log_probs: ndarray) -> List[float]:
         """
@@ -210,9 +171,6 @@ class CausalByteLanguageModel(LanguageModel):
 
         # TODO: temporary fix before redoing algorithm to handle word_end_symbols
         right_context = " "
-
-        # Optional simple case of left context
-        left_context = self._simple_case(context=left_context)
 
         # Figure out the prefix of the current word (if any)
         word_start_index = -1
@@ -331,14 +289,6 @@ class CausalByteLanguageModel(LanguageModel):
 
         context = context = "".join(evidence)
 
-        # Handle BciPy special space character
-        if not self.normal_space:
-            context = self._simple_case(context.replace(SPACE_CHAR, ' '))
-
-        # Lower case context if we aren't doing mixed case conditioning
-        if not self.mixed_case_context:
-            context = context.lower()
-
         tokens = []
         tokens.extend(self.left_context_tokens)
         # Don't extend if the context is empty, this avoids some models like byt5 from adding extra </s> at start
@@ -359,11 +309,7 @@ class CausalByteLanguageModel(LanguageModel):
         # Now construct the return dictionary that maps the character to its probability
         next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR and not self.normal_space:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
-        next_char_pred[BACKSPACE_CHAR] = 0.0
+            next_char_pred[ch] = char_probs[i]
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
@@ -392,12 +338,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         self.symbol_set_lower = []
         for ch in self.symbol_set:
-            if ch is SPACE_CHAR and not self.normal_space:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
-            else:
-                self.symbol_set_lower.append(ch.lower())
+            self.symbol_set_lower.append(ch.lower())
 
         self._build_vocab()
 
