@@ -156,7 +156,7 @@ if __name__ == "__main__":
                     print_words += f"{k}:{word.upper()}, "
                 else:
                     print_words += f"{k}:{word}, "
-            print(f" predictions {print_words} left '{context}', target '{target_word}', keys {phrase_keystrokes}")
+            print(f" predictions {print_words}, target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
