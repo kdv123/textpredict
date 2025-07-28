@@ -58,6 +58,7 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Symbols we make predictions over")
     parser.add_argument("--predict-lower", action="store_true", default=False, help="Prediction of lowercase characters only")
     parser.add_argument("--previous-max-len", type=int, help="Enable left context from previous phrases up to this many characters")
+    parser.add_argument("--previous-add", type=str, default=" ", help="Text to add after last phrase")
 
 def check_args_for_errors(args: Namespace) -> None:
     """
@@ -445,19 +446,21 @@ def sanity_check_symbols(symbol_set: List[str],
         print(f"ERROR: characters in phrases not in symbol set: {bad_symbols}!", file = stderr)
         exit(1)
 
-def shorten_context(context: str,
-                    max_len: int) -> str:
+def update_context(context: str,
+                   max_len: int,
+                   previous_add: str) -> str:
     """
     Drops words from the front of a string until the length is <= max_len
     :param context: String of text
     :param max_len: Maximum length of the context
+    :param previous_add: Text to add to previous context to separate sentences
     :return: Shortened context
     """
     if max_len <= 0:
         return ""
     elif len(context) > 0:
         # Add a space since this is a new sentence
-        context += ". "
+        context += previous_add
         # Drop words from the front of the context to get under the limit
         while len(context) > max_len:
             pos = context.find(" ")

@@ -189,8 +189,9 @@ if __name__ == "__main__":
 
         # We may want to main left context that uses previous phrases
         if args.previous_max_len:
-            context = eval_helper.shorten_context(context=context,
-                                                  max_len=args.previous_max_len)
+            context = eval_helper.update_context(context=context,
+                                                 max_len=args.previous_max_len,
+                                                 previous_add=args.previous_add)
         else:
             # Reset the context on every phrase
             context = ""
