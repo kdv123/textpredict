@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--json-file", help="Output overall model data to JSON file with specified file name.")
     parser.add_argument("--srilm-file", help="Output SRILM format debug 2 log file")
     parser.add_argument("--bootstrap-samples", type=int, default=9999, help="Number of samples to use for bootstrap estimates")
-    parser.add_argument("--bootstrap-method", default="BCa", help="Method to use for bootstrap, BCa | basic | percentile")
+    parser.add_argument("--bootstrap-method", default="basic", help="Method to use for bootstrap, BCa | basic | percentile")
     parser.add_argument("--skip-oov-symbols", action="store_true", help="Skip symbols that aren't in our symbol set")
     args = parser.parse_args()
 
