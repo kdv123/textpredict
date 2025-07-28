@@ -23,6 +23,7 @@ from datetime import datetime
 from os import path
 from fcntl import flock, LOCK_UN, LOCK_EX
 import eval_helper
+from socket import gethostname
 
 if __name__ == "__main__":
 
@@ -442,13 +443,17 @@ if __name__ == "__main__":
                            f"\tboot_ppl_low"
                            f"\tboot_ppl_high"
                            f"\tphrases"
+                           f"\tphrase_words"
+                           f"\tphrase_chars"
                            f"\ttime"
                            f"\tparams"
-                           f"\tdate_time"
                            f"\tper_symbol_time"
                            f"\tsd_per_symbol_time"
                            f"\tsentence_ppl"
-                           f"\tboot_sentence_ppl")
+                           f"\tboot_sentence_ppl"
+                           f"\tdate_time"
+                           f"\thostname"
+                           )
                 # Write any of the optional column names the client intends to log
                 if args.out_extra_cols:
                     for extra in args.out_extra_cols:
@@ -463,13 +468,17 @@ if __name__ == "__main__":
                        f"\t{ppl_low:.6f}"
                        f"\t{ppl_high:.6f}"
                        f"\t{phrase_count}"
+                       f"\t{eval_helper.count_words(phrases)}"
+                       f"\t{eval_helper.count_chars(phrases)}"
                        f"\t{inference_time:.6f}"
                        f"\t{params}"
-                       f"\t{datetime.now()}"
                        f"\t{overall_per_symbol_time:.6e}"
                        f"\t{overall_std_time:.6e}"
                        f"\t{avg_sentence_ppl:.6f}"
-                       f"\t{sentence_ppl_error_bar:.6f}")
+                       f"\t{sentence_ppl_error_bar:.6f}"
+                       f"\t{datetime.now()}"
+                       f"\t{gethostname()}")
+
             # Write any of the optional column values
             if args.out_extra_cols:
                 for extra in args.out_extra_cols:

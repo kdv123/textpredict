@@ -289,6 +289,16 @@ def count_words(phrases: List[str]) -> int:
         count += len(phrase.split())
     return count
 
+def count_chars(phrases: List[str]) -> int:
+    """
+    Count the number of characters in a list of phrases
+    :param phrases: List of phrases
+    :return: Integer count
+    """
+    count = 0
+    for phrase in phrases:
+        count += len(phrase)
+    return count
 
 def set_cpu_cores(args: Namespace) -> None:
     """
