@@ -43,4 +43,4 @@ if __name__ == "__main__":
                 num += 1
             first = False
 
-    print(f"{(total / num):.4f}")
+    print(f"{(total / num):.6f}\t")
