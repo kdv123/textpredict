@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # Iterate over all the phrases
     total_predictions = 0
     prediction_start = timer()
-    for i, phrase in enumerate(phrases):
+    for phrase_index, phrase in enumerate(phrases):
         phrase_start = timer()
 
         phrase_len = len(phrase)
@@ -80,8 +80,8 @@ if __name__ == "__main__":
         if args.case_simple:
             phrase = phrase.lower()
 
-        print(f"*** Phrase {i + 1}: {phrase}")
-        j = 0
+        print(f"*** Phrase {phrase_index + 1}: {phrase}")
+        token_index = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
 
@@ -98,13 +98,13 @@ if __name__ == "__main__":
         context_to_use = ""
 
         # Iterate over all character positions in the phrase
-        while j < len(phrase):
+        while token_index < len(phrase):
             # Figure out the target word
             # If the next letter is space, then our target is the current word
-            if j > 0 and phrase[j] == " ":
-                k = j - 1
+            if token_index > 0 and phrase[token_index] == " ":
+                k = token_index - 1
             else:
-                k = j
+                k = token_index
             # Back up until we hit space or start of string
             while k > 0 and phrase[k] != " ":
                 k -= 1
@@ -121,13 +121,13 @@ if __name__ == "__main__":
                 target_word = target_word.lower()
 
             # See if we should use a literal slot for this prediction (not used at start of words)
-            use_literal = args.literal_slot and j > 0 and phrase[j] != " "
+            use_literal = args.literal_slot and token_index > 0 and phrase[token_index] != " "
 
             # Use either the actual prefix of this sentence, or the context before symbols stripping
             if args.unstripped_context:
-                context = unstripped_context[i][j]
+                context = unstripped_context[phrase_index][token_index]
             else:
-                context = phrase[0:j]
+                context = phrase[0:token_index]
 
             extra = ""
             context_to_use = context
@@ -179,27 +179,27 @@ if __name__ == "__main__":
             if target_word in words:
                 print(f" SELECTED: {target_word}")
                 # Advance to space or end of phrase
-                while j < len(phrase) and phrase[j] != " ":
-                    context += phrase[j]
-                    j += 1
+                while token_index < len(phrase) and phrase[token_index] != " ":
+                    context += phrase[token_index]
+                    token_index += 1
                 word_prefix = ""
             else:
-                if phrase[j] == " ":
+                if phrase[token_index] == " ":
                     word_prefix = ""
                 else:
-                    word_prefix += phrase[j]
+                    word_prefix += phrase[token_index]
 
-                print(f" TYPED: '{phrase[j]}'")
+                print(f" TYPED: '{phrase[token_index]}'")
 
             stdout.flush()
-            j += 1
+            token_index += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
 
         # Update the context based on either the entire phrase or its unstripped content
         if args.unstripped_context:
-            last_phrase_final_context = unstripped_context[i][-1]
+            last_phrase_final_context = unstripped_context[phrase_index][-1]
         else:
             last_phrase_final_context = phrase
 

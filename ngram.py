@@ -92,13 +92,6 @@ class NGramLanguageModel(LanguageModel):
         else:
             start_state = state2
 
-#        # Find the rightmost space
-#        word_start_index = -1
-#        for i in range(len(left_context)):
-#            if left_context[i] == " ":
-#                word_start_index = i
-#        word_prefix = left_context[word_start_index+1:]
-
         # Reuseable KenLM state, we use this to compute the probability of next character before we decide if we are keeping it
         temp_out_state = kenlm.State()
 
@@ -173,8 +166,6 @@ class NGramLanguageModel(LanguageModel):
                             else:
                                 # Or replace the worst hypotheses with the new one
                                 heapq.heappushpop(next_hypos, (new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
-            # This slows it down for no improvement in KS
-#            next_hypos.sort(key=lambda x: x[LOGP], reverse=True)
             current_hypos = next_hypos
 
         # Convert our dictionary of finished hypotheses to a sorted list

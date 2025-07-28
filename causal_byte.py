@@ -172,14 +172,6 @@ class CausalByteLanguageModel(LanguageModel):
         # TODO: temporary fix before redoing algorithm to handle word_end_symbols
         right_context = " "
 
-        # Figure out the prefix of the current word (if any)
-#        word_start_index = -1
-#        for i in range(len(left_context)):
-#            ch = left_context[i]
-#            if ch == " ":
-#                word_start_index = i
-#        word_prefix = left_context[word_start_index+1:]
-
         tokens = []
         tokens.extend(self.left_context_tokens)
         # Don't extend if the context is empty, this avoids some models like byt5 from adding extra </s> at start
