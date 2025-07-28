@@ -147,6 +147,7 @@ if __name__ == "__main__":
     sum_symbols = 0
     all_symbol_log_probs = []
     all_sentence_ppls = []
+    context = ""
 
     # Iterate over phrases
     for i, phrase in enumerate(phrases):
@@ -185,7 +186,14 @@ if __name__ == "__main__":
         # Initial previous token is the start symbol, initial context empty
         prev_token = "<s>"
         prev_token_display = prev_token
-        context = ""
+
+        # We may want to main left context that uses previous phrases
+        if args.previous_max_len:
+            context = eval_helper.shorten_context(context=context,
+                                                  max_len=args.previous_max_len)
+        else:
+            # Reset the context on every phrase
+            context = ""
 
         predict_time_arr = np.array([])
         predict_details_arr = np.array([])
