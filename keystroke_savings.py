@@ -60,6 +60,8 @@ if __name__ == "__main__":
     total_keystrokes = 0
     total_truncated = 0
 
+    context = ""
+
     # Iterate over all the phrases
     total_predictions = 0
     prediction_start = timer()
@@ -81,9 +83,19 @@ if __name__ == "__main__":
         j = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
+
+        # We may want to main left context that uses previous phrases
+        if args.previous_max_len:
+            context = eval_helper.update_context(context=context,
+                                                 max_len=args.previous_max_len,
+                                                 previous_add=args.previous_add)
+        else:
+            # Reset the context on every phrase
+            context = ""
+
         # Iterate over all character positions in the phrase
         while j < len(phrase):
-            current_left_context = phrase[0:j]
+            #current_left_context = phrase[0:j]
 
             # Figure out the target word
             # If the next letter is space, then our target is the current word
@@ -107,15 +119,15 @@ if __name__ == "__main__":
                 target_word = target_word.lower()
 
             # Adjust to one less prediction if using literal slot and not at the start of a word
-            use_literal = args.literal_slot and len(current_left_context) > 0 and current_left_context[-1] != " "
+            use_literal = args.literal_slot and len(context) > 0 and context[-1] != " "
 
             # Optionally automatically try and fix case in lowercase phrases
-            context_to_use = current_left_context
+            context_to_use = context
             if args.case_simple:
-                context_to_use = eval_helper.case_simple(current_left_context)
-                print(f"context = '{current_left_context}', case simple = '{context_to_use}'")
+                context_to_use = eval_helper.case_simple(context)
+                print(f"context = '{context}', case simple = '{context_to_use}'")
             else:
-                print(f"context = '{current_left_context}'")
+                print(f"context = '{context}'")
 
             words = lm.predict_words(left_context=context_to_use,
                                      nbest=args.nbest,
@@ -127,11 +139,11 @@ if __name__ == "__main__":
             # But not if it already appears in the n-best results
             # If the n-best result is at maximum size, remove the least probable to make space for literal slot
             if use_literal:
-                space_pos = current_left_context.rfind(" ")
+                space_pos = context.rfind(" ")
                 if space_pos != -1:
-                    literal = current_left_context[space_pos + 1:]
+                    literal = context[space_pos + 1:]
                 else:
-                    literal = current_left_context
+                    literal = context
                 if literal not in words:
                     if len(words) == args.nbest:
                         words[-1] = literal
@@ -144,21 +156,26 @@ if __name__ == "__main__":
                     print_words += f"{k}:{word.upper()}, "
                 else:
                     print_words += f"{k}:{word}, "
-            print(f" predictions {print_words} left '{current_left_context}', target '{target_word}', keys {phrase_keystrokes}")
+            print(f" predictions {print_words} left '{context}', target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
                 print(f" SELECTED: {target_word}")
                 # Advance to space or end of phrase
                 while j < len(phrase) and phrase[j] != " ":
+                    context += phrase[j]
                     j += 1
             else:
                 print(f" TYPED: '{phrase[j]}'")
+
+            if j < len(phrase):
+                context += phrase[j]
             stdout.flush()
             j += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
+
         ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
         stdout.flush()
