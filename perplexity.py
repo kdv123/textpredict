@@ -200,8 +200,6 @@ if __name__ == "__main__":
 
         # Iterate over characters in phrase
         for (i, token) in enumerate(tokens):
-            start_predict = timer()
-
             # Even if the LM supports mixed case we may want to predict only lowercase
             if args.predict_lower:
                 token_to_predict = token.lower()
@@ -217,14 +215,17 @@ if __name__ == "__main__":
             context_to_use = context
             if args.case_simple:
                 context_to_use = eval_helper.case_simple(context)
-                if args.verbose >= 2:
+                if args.verbose >= 3:
                     print(f"context = '{context}', case simple = '{context_to_use}'")
-            elif args.verbose >= 2:
+            elif args.verbose >= 3:
                 print(f"context = '{context}'")
 
-            next_char_pred = lm.state_update(list(context_to_use))
-
+            # We want to precisely measure the inference time, don't insert any code in this block
+            context_list = list(context_to_use)
+            start_predict = timer()
+            next_char_pred = lm.predict(context_list)
             predict_time = timer() - start_predict
+
             predict_time_arr = np.append(predict_time_arr, predict_time)
             predict_details_arr = np.append(predict_details_arr,
                                             f"sentence = {phrase}, index = {i}, p( {token_display} | {prev_token_display} )")

@@ -457,7 +457,7 @@ def shorten_context(context: str,
         return ""
     elif len(context) > 0:
         # Add a space since this is a new sentence
-        context += " "
+        context += ". "
         # Drop words from the front of the context to get under the limit
         while len(context) > max_len:
             pos = context.find(" ")
