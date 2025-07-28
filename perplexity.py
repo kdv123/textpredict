@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     eval_helper.print_startup_info(args)
     eval_helper.set_cpu_cores(args)
-    phrases = eval_helper.load_phrases(args)
+    phrases, unstripped_context = eval_helper.load_phrases(args)
     device = eval_helper.get_device(args)
 
     eval_helper.prep_left_context(args)
@@ -149,8 +149,11 @@ if __name__ == "__main__":
     all_sentence_ppls = []
     context = ""
 
+    previous_context = ""
+    last_phrase_final_context = ""
+
     # Iterate over phrases
-    for i, phrase in enumerate(phrases):
+    for phrase_index, phrase in enumerate(phrases):
         symbols = 0
         accum = 0.0
         sent_ppl = 0.0
@@ -162,7 +165,7 @@ if __name__ == "__main__":
 
         # Phrase-level output
         if args.verbose >= 1:
-            print(f"*** Phrase {i + 1}: {phrase}")
+            print(f"*** Phrase {phrase_index + 1}: {phrase}")
 
         # Split into a list of characters and convert spaces to pseudo-word
         tokens = [char for char in phrase]
@@ -177,8 +180,8 @@ if __name__ == "__main__":
 
         # SRILM starts with the sentence being evaluated
         if srilm_file:
-            for (i, symbol) in enumerate(tokens):
-                if i > 0:
+            for symbol_index, symbol in enumerate(tokens):
+                if symbol_index > 0:
                     srilm_file.write(" ")
                 srilm_file.write(symbol)
             srilm_file.write("\n")
@@ -187,20 +190,22 @@ if __name__ == "__main__":
         prev_token = "<s>"
         prev_token_display = prev_token
 
-        # We may want to main left context that uses previous phrases
-        if args.previous_max_len:
-            context = eval_helper.update_context(context=context,
-                                                 max_len=args.previous_max_len,
-                                                 previous_add=args.previous_add)
-        else:
-            # Reset the context on every phrase
-            context = ""
-
         predict_time_arr = np.array([])
         predict_details_arr = np.array([])
 
+        # We may want to maintain left context that makes use of previous phrases
+        if args.previous_max_len:
+            previous_context = eval_helper.update_context(context=previous_context + last_phrase_final_context,
+                                                          max_len=args.previous_max_len,
+                                                          previous_add=args.previous_add)
+        else:
+            # Reset the context on every phrase
+            previous_context = ""
+
+        context_to_use = ""
+
         # Iterate over characters in phrase
-        for (i, token) in enumerate(tokens):
+        for token_index, token in enumerate(tokens):
             # Even if the LM supports mixed case we may want to predict only lowercase
             if args.predict_lower:
                 token_to_predict = token.lower()
@@ -210,30 +215,37 @@ if __name__ == "__main__":
             # Use the space pseudo-word for display of the space character
             token_display = token_to_predict.replace(" ", args.space_symbol)
 
-            score = 0.0
+            # Use either the actual prefix of this sentence, or the context before symbols stripping
+            if args.unstripped_context:
+                context = unstripped_context[phrase_index][token_index]
+            else:
+                context = phrase[0:token_index]
 
-            # Optionally automatically try and fix case in lowercase phrases
+            extra = ""
             context_to_use = context
+            # Optionally automatically try and fix case in lowercase phrases
             if args.case_simple:
                 context_to_use = eval_helper.case_simple(context)
-                if args.verbose >= 3:
-                    print(f"context = '{context}', case simple = '{context_to_use}'")
-            elif args.verbose >= 3:
-                print(f"context = '{context}'")
+                extra = f", case simple '{context_to_use}'"
+            if args.previous_max_len:
+                extra += f", previous_context '{previous_context}'"
+            if args.verbose >= 3:
+                print(f"context '{context}'{extra}")
 
             # We want to precisely measure the inference time, don't insert any code in this block
-            context_list = list(context_to_use)
+            context_list = list(previous_context + context_to_use)
             start_predict = timer()
             next_char_pred = lm.predict(context_list)
             predict_time = timer() - start_predict
 
             predict_time_arr = np.append(predict_time_arr, predict_time)
             predict_details_arr = np.append(predict_details_arr,
-                                            f"sentence = {phrase}, index = {i}, p( {token_display} | {prev_token_display} )")
+                                            f"sentence = {phrase}, index = {token_index}, p( {token_display} | {prev_token_display} )")
 
             # Find the probability for the correct character
-            p = next_char_pred[[c[0] for c in next_char_pred].index(token_to_predict)][1]
-            if p == 0:
+            prob_correct_char = next_char_pred[[c[0] for c in next_char_pred].index(token_to_predict)][1]
+            if prob_correct_char == 0:
+                log_prob_correct_char = 0.0
                 zero_prob += 1
                 accum = 1
                 if args.verbose >= 2:
@@ -241,27 +253,32 @@ if __name__ == "__main__":
                     print(f"prediction time = {predict_time:.6f}")
                 break
             else:
-                score = log10(p)
-
+                log_prob_correct_char = log10(prob_correct_char)
                 # Character-level output
                 if args.verbose >= 2:
-                    print(f"p( {token_display} | {prev_token_display} ...) = {p:.6f} [ {score:.6f} ]")
+                    print(f"p( {token_display} | {prev_token_display} ...) = {prob_correct_char:.6f} [ {log_prob_correct_char:.6f} ]")
                     print(f"prediction time = {predict_time:.6f}")
 
             # SRILM line for a character looks like: "	p( w | <s> ) 	= [2gram] 0.095760 [ -1.018816 ]"
             if srilm_file:
                 extra = ""
-                if i > 0:
+                if token_index > 0:
                     extra = " ..."
                 # The 1gram bit is only relevant for the n-gram, we'll just hard code to 1gram for everything
-                srilm_file.write(f"\tp( {token_display} | {prev_token_display}{extra}) \t= [1gram] {p:.6f} [ {score:.6f} ]\n")
+                srilm_file.write(f"\tp( {token_display} | {prev_token_display}{extra}) \t= [1gram] {prob_correct_char:.6f} [ {log_prob_correct_char:.6f} ]\n")
 
-            accum += score
+            accum += log_prob_correct_char
             prev_token_display = token_display
 
-            context += token
-            all_symbol_log_probs.append(score)
+            #context += token
+            all_symbol_log_probs.append(log_prob_correct_char)
             stdout.flush()
+
+        # Update the context based on either the entire phrase or its unstripped content
+        if args.unstripped_context:
+            last_phrase_final_context = unstripped_context[phrase_index][-1]
+        else:
+            last_phrase_final_context = phrase
 
         # Compute summary stats on prediction times for this phrase
         per_symbol_time = np.average(predict_time_arr)

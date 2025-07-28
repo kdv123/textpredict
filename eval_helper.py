@@ -4,7 +4,7 @@ from datasets import load_dataset
 import re
 from torch import set_num_threads
 from psutil import cpu_count
-from typing import List
+from typing import List, Tuple
 from datetime import datetime
 from socket import gethostname
 from timeit import default_timer as timer
@@ -58,7 +58,8 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Symbols we make predictions over")
     parser.add_argument("--predict-lower", action="store_true", default=False, help="Prediction of lowercase characters only")
     parser.add_argument("--previous-max-len", type=int, help="Enable left context from previous phrases up to this many characters")
-    parser.add_argument("--previous-add", type=str, default=" ", help="Text to add after last phrase")
+    parser.add_argument("--previous-add", type=str, default=" ", help="Text to add after last phrase when using context from previous phrases")
+    parser.add_argument("--unstripped-context", action="store_true", default=False, help="Use left context before stripping of symbols")
 
 def check_args_for_errors(args: Namespace) -> None:
     """
@@ -95,6 +96,9 @@ def check_args_for_errors(args: Namespace) -> None:
         exit(1)
     if args.lower and args.case_simple:
         print("ERROR: Only one of --lower and --case-simple should be specified!", file = stderr)
+        exit(1)
+    if args.unstripped_context and not args.strip_symbols:
+        print("ERROR: Using unstripped context requires --strip-symbols!", file = stderr)
         exit(1)
 
 def check_args_for_warnings(args: Namespace) -> None:
@@ -182,7 +186,7 @@ def _normalize_phrases(phrases: List[str],
                        lower: bool = False,
                        strip_symbols: bool = False,
                        truncate_max_len: int = None,
-                       strip_start_end_words: bool = False) -> List[str]:
+                       strip_start_end_words: bool = False) -> Tuple[List[str], List[str]]:
     """
     Perform text normalization on the phrases
     :param phrases: Original list of all the phrases
@@ -190,10 +194,13 @@ def _normalize_phrases(phrases: List[str],
     :param strip_symbols: Converts characters besides A-Z and apostrophe to space then collapses contiguous whitespace
     :param truncate_max_len: Truncate any phrase with this many characters
     :param strip_start_end_words: Strip the start and end words <s> and </s>
-    :return: List of phrases
+    :return: Tuple(List of normalized phrases, List of context before symbol stripped, None if strip_symbols False)
     """
-    result = []
+    result_phrases = []
+    result_unstripped = []
+
     for phrase in phrases:
+        index_to_unstripped = None
         if lower:
             phrase = phrase.lower()
         # Drop words until we meet the truncation max length
@@ -207,12 +214,42 @@ def _normalize_phrases(phrases: List[str],
         if strip_start_end_words:
             phrase = phrase.replace("<s> ", "").replace(" </s>", "")
         if strip_symbols:
-            phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
-            phrase = re.sub(r'\s+', ' ', phrase).strip()
+            # Go through the string one character at-a-time stripping symbols
+            # Changed from using two regular expressions since we may want to know previous context including symbols
+            phrase_stripped = ""
+            between_words = True
+            has_output_letter = False
+            index_to_unstripped = []
+            for i in range(len(phrase)):
+                ch = phrase[i]
+                if (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "'":
+                    if between_words and has_output_letter:
+                        phrase_stripped +=  " "
+                        index_to_unstripped.append(phrase[0:i-1])
+                    phrase_stripped += ch
+                    between_words = False
+                    has_output_letter = True
+                    index_to_unstripped.append(phrase[0:i])
+                else:
+                    between_words = True
+            # Extra last one containing entire unstripped context
+            index_to_unstripped.append(phrase)
+            phrase = phrase_stripped
+# Old way of doing it
+#            phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
+#            phrase = re.sub(r'\s+', ' ', phrase).strip()
+#            print(f"DEBUG: {orig_phrase} : '{phrase}' <-> '{phrase_stripped}' (len: {len(phrase_stripped)})")
+#            print(f"DEBUG: {len(index_to_unstripped)} {index_to_unstripped}")
+#            for i in range(len(phrase)):
+#                ch = phrase[i]
+#                print(f"DEBUG i {i}, ch '{ch}' -> '{index_to_unstripped[i]}'")
+#            assert(phrase == phrase_stripped)
+
         # It could be the case we normalized it to be blank
         if len(phrase) > 0:
-            result.append(phrase)
-    return result
+            result_phrases.append(phrase)
+            result_unstripped.append(index_to_unstripped)
+    return result_phrases, result_unstripped
 
 def case_simple(phrase: str) -> str:
     """
@@ -289,7 +326,7 @@ def get_device(args: Namespace) -> str:
     return device
 
 def load_phrases(args: Namespace,
-                 quiet: bool = False) -> List[str]:
+                 quiet: bool = False) -> Tuple[List[str], List[str]]:
     """
     Load the phrases we are going to simulate writing
     :param args: Command line arguments passed to main function
@@ -322,18 +359,18 @@ def load_phrases(args: Namespace,
         exit(1)
 
     # Second phrase is to normalize the text in various ways
-    phrases = _normalize_phrases(phrases=phrases,
-                                 lower=args.lower,
-                                 strip_symbols=args.strip_symbols,
-                                 truncate_max_len=args.truncate_max_len,
-                                 strip_start_end_words=args.strip_start_end_words)
+    phrases, unstripped = _normalize_phrases(phrases=phrases,
+                                             lower=args.lower,
+                                             strip_symbols=args.strip_symbols,
+                                             truncate_max_len=args.truncate_max_len,
+                                             strip_start_end_words=args.strip_start_end_words)
 
     if not quiet:
         print(f"After normalization: {len(phrases)} phrases, words = {count_words(phrases)}")
         print(f"Normalized first phrase: '{phrases[0]}'")
         print(f"Normalized last phrase: '{phrases[-1]}'")
 
-    return phrases
+    return phrases, unstripped
 
 def print_startup_info(args: Namespace) -> None:
     """
@@ -460,13 +497,14 @@ def update_context(context: str,
         return ""
     elif len(context) > 0:
         # Add a space since this is a new sentence
-        context += previous_add
+        if previous_add:
+            context += previous_add
         # Drop words from the front of the context to get under the limit
         while len(context) > max_len:
             pos = context.find(" ")
-            if pos != -1:
+            # If there is no space, or it is at the very end of the string, then we fall back to truncating
+            if pos != -1 and pos != len(context) - 1:
                 context = context[pos + 1:]
             else:
-                # Can't drop a word, so just truncate
                 context = context[-max_len:]
     return context

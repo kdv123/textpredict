@@ -92,12 +92,12 @@ class NGramLanguageModel(LanguageModel):
         else:
             start_state = state2
 
-        # Find the rightmost space
-        word_start_index = -1
-        for i in range(len(left_context)):
-            if left_context[i] == " ":
-                word_start_index = i
-        word_prefix = left_context[word_start_index+1:]
+#        # Find the rightmost space
+#        word_start_index = -1
+#        for i in range(len(left_context)):
+#            if left_context[i] == " ":
+#                word_start_index = i
+#        word_prefix = left_context[word_start_index+1:]
 
         # Reuseable KenLM state, we use this to compute the probability of next character before we decide if we are keeping it
         temp_out_state = kenlm.State()
@@ -181,7 +181,7 @@ class NGramLanguageModel(LanguageModel):
         sorted_best = sorted(finished_hypos.items(), key=lambda item: item[1], reverse=True)[:nbest]
 
         # Optional inclusion of log prob in result
-        return [(word_prefix + hypo[0], hypo[1]) if return_log_probs else word_prefix + hypo[0] for hypo in sorted_best]
+        return [(hypo[0], hypo[1]) if return_log_probs else hypo[0] for hypo in sorted_best]
 
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """

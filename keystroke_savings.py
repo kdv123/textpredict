@@ -38,7 +38,7 @@ if __name__ == "__main__":
     eval_helper.print_startup_info(args)
     eval_helper.set_cpu_cores(args)
     device = eval_helper.get_device(args)
-    phrases = eval_helper.load_phrases(args)
+    phrases, unstripped_context = eval_helper.load_phrases(args)
 
     eval_helper.prep_left_context(args)
     print(f"Prediction left context: '{args.left_context}'")
@@ -60,7 +60,8 @@ if __name__ == "__main__":
     total_keystrokes = 0
     total_truncated = 0
 
-    context = ""
+    previous_context = ""
+    last_phrase_final_context = ""
 
     # Iterate over all the phrases
     total_predictions = 0
@@ -84,19 +85,20 @@ if __name__ == "__main__":
         phrase_keystrokes = 0
         phrase_predictions = 0
 
-        # We may want to main left context that uses previous phrases
+        # We may want to maintain left context that makes use of previous phrases
         if args.previous_max_len:
-            context = eval_helper.update_context(context=context,
-                                                 max_len=args.previous_max_len,
-                                                 previous_add=args.previous_add)
+            previous_context = eval_helper.update_context(context=previous_context + last_phrase_final_context,
+                                                          max_len=args.previous_max_len,
+                                                          previous_add=args.previous_add)
         else:
             # Reset the context on every phrase
-            context = ""
+            previous_context = ""
+
+        word_prefix = ""
+        context_to_use = ""
 
         # Iterate over all character positions in the phrase
         while j < len(phrase):
-            #current_left_context = phrase[0:j]
-
             # Figure out the target word
             # If the next letter is space, then our target is the current word
             if j > 0 and phrase[j] == " ":
@@ -118,22 +120,37 @@ if __name__ == "__main__":
             if args.predict_lower:
                 target_word = target_word.lower()
 
-            # Adjust to one less prediction if using literal slot and not at the start of a word
-            use_literal = args.literal_slot and len(context) > 0 and context[-1] != " "
+            # See if we should use a literal slot for this prediction (not used at start of words)
+            use_literal = args.literal_slot and j > 0 and phrase[j] != " "
 
-            # Optionally automatically try and fix case in lowercase phrases
+            # Use either the actual prefix of this sentence, or the context before symbols stripping
+            if args.unstripped_context:
+                context = unstripped_context[i][j]
+            else:
+                context = phrase[0:j]
+
+            extra = ""
             context_to_use = context
+            # Optionally automatically try and fix case in lowercase phrases
             if args.case_simple:
                 context_to_use = eval_helper.case_simple(context)
-                print(f"context = '{context}', case simple = '{context_to_use}'")
-            else:
-                print(f"context = '{context}'")
+                extra = f", case simple '{context_to_use}'"
+            if args.previous_max_len:
+                extra += f", previous_context '{previous_context}'"
+            print(f"prefix '{word_prefix}', context '{context}'{extra}")
 
-            words = lm.predict_words(left_context=context_to_use,
+            words = lm.predict_words(left_context=previous_context + context_to_use,
                                      nbest=args.nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols)
+
+            # predict_words only returns the text that completes the current left_context
+            # We need to add back in the prefix of the word thus far
+            if args.predict_lower:
+                words = [word_prefix.lower() + word for word in words]
+            else:
+                words = [word_prefix + word for word in words]
 
             # Add the literal text type as the final slot
             # But not if it already appears in the n-best results
@@ -165,16 +182,26 @@ if __name__ == "__main__":
                 while j < len(phrase) and phrase[j] != " ":
                     context += phrase[j]
                     j += 1
+                word_prefix = ""
             else:
+                if phrase[j] == " ":
+                    word_prefix = ""
+                else:
+                    word_prefix += phrase[j]
+
                 print(f" TYPED: '{phrase[j]}'")
 
-            if j < len(phrase):
-                context += phrase[j]
             stdout.flush()
             j += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
+
+        # Update the context based on either the entire phrase or its unstripped content
+        if args.unstripped_context:
+            last_phrase_final_context = unstripped_context[i][-1]
+        else:
+            last_phrase_final_context = phrase
 
         ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")

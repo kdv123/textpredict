@@ -148,7 +148,7 @@ class CausalByteLanguageModel(LanguageModel):
         """
         Given some left text context, predict the most likely next words.
         Left and right context use normal space character for any spaces, we convert internally to <sp>
-        :param left_context: previous text we are condition on
+        :param left_context: previous text we are condition on, note this includes the prefix of the current word
         :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
         :param nbest: number of most likely words to return
         :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
@@ -173,12 +173,12 @@ class CausalByteLanguageModel(LanguageModel):
         right_context = " "
 
         # Figure out the prefix of the current word (if any)
-        word_start_index = -1
-        for i in range(len(left_context)):
-            ch = left_context[i]
-            if ch == " ":
-                word_start_index = i
-        word_prefix = left_context[word_start_index+1:]
+#        word_start_index = -1
+#        for i in range(len(left_context)):
+#            ch = left_context[i]
+#            if ch == " ":
+#                word_start_index = i
+#        word_prefix = left_context[word_start_index+1:]
 
         tokens = []
         tokens.extend(self.left_context_tokens)
@@ -265,7 +265,7 @@ class CausalByteLanguageModel(LanguageModel):
         result = []
         for hypo in finished_hypos:
             # Optional return of log probabilities
-            word = word_prefix + hypo[1].removesuffix(right_context)
+            word = hypo[1].removesuffix(right_context)
             # TODO: For now we only make lower case predictions
             word = word.lower()
             # Reverse the order so it is word followed optionally by log prob
