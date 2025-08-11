@@ -13,7 +13,11 @@ import time
 from collections import defaultdict
 from typing import Final
 #from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
-
+import re
+from nltk.corpus import words as all_words
+import nltk
+nltk.download('words')
+nltk.download('brown')
 class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal model, GPT-2 by default."""
 
@@ -441,58 +445,62 @@ class CausalLanguageModel(LanguageModel):
                       max_completed: int = 32) -> List[Tuple]:
         """
         Predict top likely next words using beam search.
+        
+        This function extends the character-level prediction to word-level by:
+        1. Starting from the current context
+        2. Using beam search to explore possible word completions
+        3. Tracking completed words and their probabilities
+        4. Returning the top-N most likely words
+        
+        Args:
+            evidence: List of characters typed by the user
+            nbest: Number of top word predictions to return
+            beam: Beam width for search (how many hypotheses to track)
+            max_new_tokens: Maximum tokens to generate per word
+            max_completed: Maximum number of completed words to find before stopping
+        Returns:
+            List of top predicted words ordered by probability
         """
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
-
+        
+        # Set beam search parameters
         self.beam_width = beam
         self.prune_margin = 5  # Add margin for pruning
+        
+        # Convert evidence list to string and handle space character
         converted_context = "".join(evidence)
-        converted_context_lower = converted_context.lower()
         context = converted_context.replace(SPACE_CHAR, ' ')
 
-        if self.case_simple and len(context) > 0:
-            cased_context = ""
-            words = context.split()
-            for i, word in enumerate(words):
-                if i == 0 and word[0:1].islower():
-                    word = word[0].upper() + word[1:]
-                if i > 0 and word in self.simple_upper_words:
-                    word = self.simple_upper_words[word]
-                if i > 0:
-                    cased_context += " "
-                cased_context += word
-            if context.endswith(" "):
-                cased_context += " "
-            context = cased_context
-
-        context_lower = context.lower()
-        pos = context_lower.rfind(" ")
-        tokens = list(self.left_context_tokens)
-
+        word_list = set(all_words.words())
+        # Find the last space to determine where the current word starts
+        pos = context.rfind(" ")
+        tokens = list(self.left_context_tokens) # Start with model's left context tokens
         if pos >= 0:
-            if self.mixed_case_context:
-                word_prefix = context[pos+1:]
-                tokens.extend(self._encode(context[:pos]))
-            else:
-                word_prefix = context_lower[pos+1:]
-                tokens.extend(self._encode(context_lower[:pos]))
+            # There's a space, so we have a word prefix after it
+            word_prefix = context[pos+1:]
+            # Tokenize everything before the current word
+            tokens.extend(self._encode(context[:pos]))
         else:
-            word_prefix = context if self.mixed_case_context else context_lower
-            tokens.extend(self._encode('' if self.mixed_case_context else ''))
-
-
+            # No space found, entire context is the word prefix
+            word_prefix = context
+            tokens.extend(self._encode(''))
+        
+        # Pre-decode all vocabulary tokens for efficient string matching
+        if not hasattr(self, 'decoded_vocab'):
+            self.decoded_vocab = [self.tokenizer.decode([token_id]) for token_id in range(self.tokenizer.vocab_size)]
+        # Determine valid starting tokens based on word prefix
         if word_prefix == "":
-            valid_tokens = list(range(self.tokenizer.vocab_size))
+            # If no prefix, valid tokens are those starting with space (word boundaries)
+            valid_tokens = [token_id for token_id, token_str in enumerate(self.decoded_vocab) if token_str.startswith(" ")]
         else:
+            # Find tokens that could continue or complete the word prefix
+            word_prefix_lstrip = word_prefix.lstrip()
             valid_tokens = []
-            for token_id in range(self.tokenizer.vocab_size):
-                token_str = self.tokenizer.convert_ids_to_tokens([token_id])[0]
-                clean_token_str = token_str.lstrip('Ġ').lstrip()
-
-                if clean_token_str.startswith(word_prefix) and (
-                    token_str.startswith("Ġ") or token_str.startswith(" ")
-                ):
+            for token_id, token_str in enumerate(self.decoded_vocab):
+                clean_token_str = token_str.lstrip()
+                # Token is valid if it starts with our prefix OR if our prefix starts with it
+                if clean_token_str.startswith(word_prefix_lstrip) or word_prefix_lstrip.startswith(clean_token_str):
                     valid_tokens.append(token_id)
         LOGP, SEQ = 0, 1
         current_hypos = [(0.0, tokens)]
@@ -502,7 +510,8 @@ class CausalLanguageModel(LanguageModel):
         completed = 0
         batch_size = 32
         tokens_generated=0
-        MAX_TOKEN_PER_WORD = 20  
+        MAX_TOKEN_PER_WORD = 20
+        end_punctuation_pattern = re.compile(r'[\.\!\?…]+[\"\')\]]*$')
 
 
         while len(current_hypos) > 0 and not done:
@@ -517,110 +526,145 @@ class CausalLanguageModel(LanguageModel):
                 batch_seqs = seqs[i:i + batch_size]
                 batch_logps = add_logps[i:i + batch_size]
 
-                tokens_tensor = torch.tensor(batch_seqs).to(self.device)
+                tokens_tensor = torch.tensor(batch_seqs, device=self.device)
+
                 before_inference_ns = time.time_ns()
                 with torch.no_grad():
-                    # Compute the probabilities from the logits
-                    log_probs = torch.log_softmax(self.model(tokens_tensor).logits[:, -1, :], dim=1)
+                    # Get model predictions for next token
+                    logits = self.model(tokens_tensor).logits[:, -1, :]  # Last position logits
+                    log_probs = torch.log_softmax(logits, dim=-1)        
+                    # Add current hypothesis log probability to get cumulative probability
+                    add_tensor = torch.tensor(batch_logps, device=self.device).unsqueeze(1)
 
-                    # Create a column vector where each row is that hypothesis' current likelihood.
-                    add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape(-1, 1).to(self.device)
-
-                    # Add the current likelihoods with each subtoken's probability.
-                    new_log_probs = torch.add(log_probs, add_tensor)
-
-                    # Use the GPU to sort the tokens by probability, this allows use to do better max completed pruning in the search.
-                    # Move both back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
-                    sorted_args = torch.argsort(new_log_probs, descending=True, dim=1).detach()
-                    new_log_probs = new_log_probs.detach()
+                    new_log_probs = log_probs + add_tensor  
+                    # Sort tokens by probability for efficient exploration
+                    sorted_args = torch.argsort(new_log_probs, descending=True, dim=1)
+                    # On first token generation, handle valid token filtering differently
                     if tokens_generated == 0:
                         if word_prefix == "":
-                            topk_log_probs, topk_indices = torch.topk(new_log_probs, 50, dim=1, largest=True, sorted=True)
+                            # No prefix: take top-10 tokens
+                            topk_log_probs, topk_indices = torch.topk(new_log_probs, 10, dim=1, largest=True, sorted=True)
                         else:
+                            # With prefix: consider all tokens (will filter later)
                             topk_log_probs = new_log_probs
-                            topk_indices = torch.argsort(new_log_probs, descending=True, dim=1)
+                            topk_indices = sorted_args
                     else:
-                        topk_log_probs, topk_indices = torch.topk(new_log_probs, 50, dim=1, largest=True, sorted=True)
+                        # After first token: always take top-10 for efficiency
+                        topk_log_probs, topk_indices = torch.topk(new_log_probs, 10, dim=1, largest=True, sorted=True)
 
                 self.predict_inference_ns += time.time_ns() - before_inference_ns
-
-                all_new_log_probs.append(topk_log_probs.cpu().numpy())
-                all_sorted_args.append(topk_indices.cpu().numpy())
-
-            new_log_probs = np.vstack(all_new_log_probs)
-            sorted_args = np.vstack(all_sorted_args)
-
+                # Accumulate batch results
+                all_new_log_probs.append(topk_log_probs)
+                all_sorted_args.append(topk_indices)
+            # Concatenate all batch results
+            new_log_probs = torch.cat(all_new_log_probs, dim=0)  
+            sorted_args = torch.cat(all_sorted_args, dim=0)     
+            # Prepare for next round of hypotheses
             next_hypos = []
-
+            # Cache decoded sequences to avoid redundant decoding
+            decode_cache = {}
+            # Process each current hypothesis
             for current_index, current in enumerate(current_hypos):
+                # Stop extending if we've generated enough tokens
                 if tokens_generated >= max_new_tokens:
                     continue
 
-                for token_index, token_id in enumerate(sorted_args[current_index]):
-
+                current_seq = current[SEQ]
+                current_logp = current[LOGP]
+                # Get candidate tokens for this hypothesis
+                token_indices = sorted_args[current_index]  
+                token_logps = new_log_probs[current_index] 
+                # On first token, filter to only valid starting tokens
+                if tokens_generated == 0:
+                    valid_tokens_tensor = torch.tensor(valid_tokens, device=token_indices.device)
+                    mask_valid_tokens = torch.isin(token_indices, valid_tokens_tensor)
+                    token_indices = token_indices[mask_valid_tokens]
+                    token_logps = token_logps[mask_valid_tokens]
+                # Skip if no valid tokens
+                if token_indices.numel() == 0:
+                    continue  
+                # Explore each candidate token
+                for token_id, raw_logp in zip(token_indices.tolist(), token_logps.tolist()):
+                    # Additional validation for first token
                     if tokens_generated == 0 and token_id not in valid_tokens:
                         continue
-                    new_seq = current[SEQ] + [token_id]
-                    raw_logp = new_log_probs[current_index][token_index]
-
-                    suffix = self.tokenizer.decode([x for x in new_seq if x not in tokens], skip_special_tokens=True)
-                    if suffix.startswith(' '):
-                      suffix = suffix[1:]
-
+                    # Create new sequence with this token
+                    new_seq = current_seq + [token_id]
+                    # Extract only the generated suffix (not the context)
+                    suffix_tokens = [x for x in new_seq if x not in tokens]
+                    suffix_key = tuple(suffix_tokens)
+                    # Use cache to avoid redundant decoding
+                    if suffix_key in decode_cache:
+                        suffix = decode_cache[suffix_key]
+                    else:
+                        suffix = self.tokenizer.decode(suffix_tokens, skip_special_tokens=True).lstrip()
+                        decode_cache[suffix_key] = suffix
+                    # Check if generated text still matches our word prefix
                     if not suffix.startswith(word_prefix):
                         continue
-
+                    # Prevent excessively long word generation
                     token_len_in_word = len(new_seq) - len(tokens)
                     if token_len_in_word > MAX_TOKEN_PER_WORD:
                         continue
 
-                    if ' ' in suffix or token_len_in_word >= max_new_tokens:
-                        word = suffix.split(' ')[0].strip().lower()
+                    suffix_stripped = suffix.strip().lower()
+                    # Check if we've completed a word
+                    # Conditions: space found, max tokens reached, punctuation, or valid dictionary word
+                    if (' ' in suffix_stripped or
+                        token_len_in_word >= max_new_tokens or
+                        end_punctuation_pattern.search(suffix_stripped) or
+                        (((len(suffix_stripped) > 1) or suffix_stripped in {'a', 'i'}) and
+                        suffix_stripped in word_list)):
+                        # Extract the completed word (before any space)
+                        word = suffix_stripped.split(' ')[0]
+                        # Update or add word to completed dictionary
                         if word in completed_words_dict:
-
-                            prev_logp, prev_encoded, prev_count = completed_words_dict[word]
-                            combined_logp = np.logaddexp(prev_logp, raw_logp)
-                            completed_words_dict[word] = (combined_logp, prev_encoded, prev_count+1)
+                            # Word seen before: combine probabilities using log-sum-exp
+                            prev_logp, _ = completed_words_dict[word]
+                            combined_logp = torch.logaddexp(torch.tensor(prev_logp), torch.tensor(raw_logp)).item()
+                            completed_words_dict[word] = (combined_logp, word)
                         else:
-                            encoded = self._encode(word)
-                            completed_words_dict[word] = (raw_logp, encoded,1)
-
+                            # New word: add to dictionary
+                            completed_words_dict[word] = (raw_logp, word)
+                        # Update best completed probability for pruning
                         if best_completed_logp is None or raw_logp > best_completed_logp:
-                                best_completed_logp = raw_logp
+                            best_completed_logp = raw_logp
 
                         completed += 1
-                        find_word = True
-
+                        # Check if we've found enough completed words
                         if self.max_completed and completed >= self.max_completed:
-                                done = True
-                                break
+                            done = True
+                            break
 
                     else:
-                            if best_completed_logp is not None and raw_logp < best_completed_logp - self.prune_margin:
-                                continue
+                        # Word not complete: consider extending this hypothesis
+                        # Prune hypotheses that are much worse than best completed word
+                        if best_completed_logp is not None and raw_logp < best_completed_logp - self.prune_margin:
+                            continue
+                        # Add to next round of hypotheses (maintaining beam width)
+                        if not self.beam_width or len(next_hypos) < self.beam_width:
+                            heapq.heappush(next_hypos, (raw_logp, new_seq))
+                        elif raw_logp > next_hypos[0][LOGP]:
+                            # Replace worst hypothesis if this one is better
+                            heapq.heappushpop(next_hypos, (raw_logp, new_seq))
 
-                            if not self.beam_width or len(next_hypos) < self.beam_width:
-                                heapq.heappush(next_hypos, (raw_logp, new_seq))
-                            elif raw_logp > next_hypos[0][LOGP]:
-                                heapq.heappushpop(next_hypos, (raw_logp, new_seq))
-
-                if self.max_completed and completed >= self.max_completed:
-                    done = True
+                if done:
                     break
-
+            # Move to next generation step
             tokens_generated += 1
             current_hypos = next_hypos
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
-
+        # Process and return results
+        # Sort completed words by probability
         completed_words = list(completed_words_dict.values())
         completed_words.sort(reverse=True)
+        # Extract unique top-N words
         results = []
         seen_words = set()
-
-        for logp, seq, count in completed_words:
-            word = self.tokenizer.decode(seq, skip_special_tokens=True)
+        for logp, seq in completed_words:
+            word = seq
             if word and word not in seen_words:
                 seen_words.add(word)
                 results.append(word)
