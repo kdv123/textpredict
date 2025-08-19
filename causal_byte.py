@@ -88,7 +88,6 @@ class CausalByteLanguageModel(LanguageModel):
 
         for i in range(self.vocab_size):
             word = self.tokenizer.decode([i])
-            #print(f"DEBUG vocab {i} '{word}'")
             word_lower = word.lower()
             self.index_to_word[i] = word
             self.index_to_word_lower[i] = word_lower
@@ -281,15 +280,17 @@ class CausalByteLanguageModel(LanguageModel):
                       nbest: int = None,
                       beam_logp_best: float = None,
                       beam_search_max: int = None,
+                      max_word_len: int = None,
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
         Left and right context use normal space character for any spaces, we convert internally to space symbol, e.g. <sp>
-        :param left_context: previous text we are condition on
+        :param left_context: previous text we are conditioning on
         :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
         :param nbest: number of most likely words to return
         :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
         :param beam_search_max: maximum number of hypotheses to track during each extension of search
+        :param max_word_len: maximum length of words that can be predicted
         :param return_log_probs: whether to return log probabilities of each word
         :return: List of tuples with words and their log probabilities
         """
@@ -300,6 +301,8 @@ class CausalByteLanguageModel(LanguageModel):
             beam_logp_best = 5.0
         if beam_search_max is None:
             beam_search_max = 100
+        if max_word_len is None:
+            max_word_len = 50
 
         # Since List is a mutable type, we can't set a default reliably in the method declaration
         # We'll set the default of a trailing space if caller didn't specify a list of right contexts
@@ -344,6 +347,15 @@ class CausalByteLanguageModel(LanguageModel):
         # We use a dictionary since we may want to merge hypotheses that are the same word
         finished_hypos = {}
         best_finished_log_prob = float("-inf")
+
+        # Compute the maximum length of hypotheses based on existing prefix of word (if any)
+        prefix_len = 0
+        if len(left_context) > 0:
+            pos = len(left_context) - 1
+            while left_context[pos] != " " and pos >= 0:
+                pos -= 1
+                prefix_len += 1
+        max_hypo_len = max(0, max_word_len - prefix_len)
 
         while len(current_hypos) > 0:
             # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
@@ -391,14 +403,15 @@ class CausalByteLanguageModel(LanguageModel):
                         hypo = current_hypos[batch_start_index + batch_index]
 
                         # Pull the log prob for the corresponding position in the inference and add to existing accumulated log prob
-                        new_log_prob = log_probs[batch_index, token_index] + hypo[LOGP]
+                        # Use float cast to avoid 16-bit floating point when on GPU with --fp16 switch
+                        new_log_prob = float(log_probs[batch_index, token_index]) + hypo[LOGP]
 
                         # We avoid adding finished or intermediate hypotheses if they are outside log prob beam
                         # This is a bit faster than only doing it for intermediate hypotheses
                         if (best_finished_log_prob - new_log_prob) < beam_logp_best:
                             # See if we have finished by generating any of the valid right symbols
                             # These were organized to be at the end of the list of search_symbols
-                            if search_index >= index_first_end_symbol:
+                            if search_index >= index_first_end_symbol and len(hypo[STR]) <= max_hypo_len:
                                 # NOTE: we don't add the ending symbol to the finished hypothesis
                                 # Optionally we marginalize all cases to predict just lowercase words
                                 if self.predict_lower:
@@ -418,7 +431,7 @@ class CausalByteLanguageModel(LanguageModel):
 
                             # This hypothesis didn't finish
                             # Keep if it is still within beam width of our best hypothesis thus far
-                            else:
+                            elif len(hypo[STR]) < max_hypo_len:
                                 # This hypothesis is within the beam of the best to date
                                 # Extend by the text and token ID
                                 new_hypo = (new_log_prob, hypo[STR] + search_symbols[search_index], hypo[TOKENS] + token_index)

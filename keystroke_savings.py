@@ -23,6 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
+    parser.add_argument("--max-word-len", type=int, help="Max length of words to predict")
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
@@ -144,7 +145,9 @@ if __name__ == "__main__":
                                      nbest=args.nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
-                                     word_end_symbols=args.word_end_symbols)
+                                     word_end_symbols=args.word_end_symbols,
+                                     max_word_len=args.max_word_len,
+                                     )
 
             # predict_words only returns the text that completes the current left_context
             # We need to add back in the prefix of the word thus far
