@@ -1,6 +1,6 @@
 from collections import Counter
 from typing import Optional, List, Tuple, Final
-from language_model import LanguageModel
+from language_model import LanguageModel, compute_max_hypo_len
 from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
@@ -28,7 +28,14 @@ class NGramLanguageModel(LanguageModel):
         self.model = None
         self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm
-        self.load()
+        try:
+            self.model = kenlm.LanguageModel(self.lm_path)
+        except BaseException:
+            raise InvalidLanguageModelException(
+                f"A valid model path must be provided for the KenLMLanguageModel.\nPath{self.lm_path} is not valid.")
+        self.state = kenlm.State()
+        self.state2 = kenlm.State()
+
         self.space_symbol = space_symbol
 
         # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
@@ -132,13 +139,7 @@ class NGramLanguageModel(LanguageModel):
         best_finished_log_prob = float("-inf")
 
         # Compute the maximum length of hypotheses based on existing prefix of word (if any)
-        prefix_len = 0
-        if len(left_context) > 0:
-            pos = len(left_context) - 1
-            while left_context[pos] != " " and pos >= 0:
-                pos -= 1
-                prefix_len += 1
-        max_hypo_len = max(0, max_word_len - prefix_len)
+        max_hypo_len = compute_max_hypo_len(left_context=left_context, max_word_len=max_word_len)
 
         # Note: Python's heap pops minimum value, so we are going to explore worst first.
         # Might be better to explore best first, but this is in conflict with the need to easily replace the worst hypothesis.
@@ -207,8 +208,6 @@ class NGramLanguageModel(LanguageModel):
         if len(context) >= self.model.order:
             context = context[-(self.model.order-1):]
 
-        evidence_str = ''.join(context)
-
         for i, ch in enumerate(context):
             # Replace spaces with whatever the n-gram model uses for a space
             if ch == " ":
@@ -228,39 +227,6 @@ class NGramLanguageModel(LanguageModel):
             next_char_pred = self.prob_dist(self.state)
         else:
             next_char_pred = self.prob_dist(self.state2)
-
-        return next_char_pred
-
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    def load(self) -> None:
-        """
-            Load the language model, initialize state variables
-        Args:
-            path: language model file path
-        """
-
-        try:
-            self.model = kenlm.LanguageModel(self.lm_path)
-        except BaseException:
-            raise InvalidLanguageModelException(
-                f"A valid model path must be provided for the KenLMLanguageModel.\nPath{self.lm_path} is not valid.")
-
-        self.state = kenlm.State()
-        self.state2 = kenlm.State()
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text and outputs probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbols with probabilities
-        """
-        next_char_pred = self.predict(evidence)
 
         return next_char_pred
 

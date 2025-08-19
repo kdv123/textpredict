@@ -3,7 +3,8 @@ from typing import List, Tuple, Final
 from numpy import ndarray
 from numpy import sum
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from language_model import LanguageModel
+
+from language_model import LanguageModel, compute_max_hypo_len
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
@@ -73,7 +74,26 @@ class CausalByteLanguageModel(LanguageModel):
         self.model_name = lang_model_name
         self.model_dir = lm_path if lm_path else self.model_name
 
-        self.load()
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+        except BaseException:
+            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
+        self.vocab_size = self.tokenizer.vocab_size
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
+            if self.fp16 and self.device == "cuda":
+                self.model = self.model.half()
+        except:
+            raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
+
+        self.model.eval()
+        self.model.to(self.device)
+
+        self.symbol_set_lower = []
+        for ch in self.symbol_set:
+            self.symbol_set_lower.append(ch.lower())
+
+        self._build_vocab()
 
     def _build_vocab(self) -> None:
         """
@@ -346,13 +366,7 @@ class CausalByteLanguageModel(LanguageModel):
         best_finished_log_prob = float("-inf")
 
         # Compute the maximum length of hypotheses based on existing prefix of word (if any)
-        prefix_len = 0
-        if len(left_context) > 0:
-            pos = len(left_context) - 1
-            while left_context[pos] != " " and pos >= 0:
-                pos -= 1
-                prefix_len += 1
-        max_hypo_len = max(0, max_word_len - prefix_len)
+        max_hypo_len = compute_max_hypo_len(left_context=left_context, max_word_len=max_word_len)
 
         while len(current_hypos) > 0:
             # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
@@ -487,48 +501,6 @@ class CausalByteLanguageModel(LanguageModel):
             next_char_pred[ch] = char_probs[i]
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
-
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    def load(self) -> None:
-        """
-            Load the language model and tokenizer, initialize class variables
-        """
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
-        except BaseException:
-            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
-        self.vocab_size = self.tokenizer.vocab_size
-        try:
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
-            if self.fp16 and self.device == "cuda":
-                self.model = self.model.half()
-        except:
-            raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
-
-        self.model.eval()
-        self.model.to(self.device)
-
-        self.symbol_set_lower = []
-        for ch in self.symbol_set:
-            self.symbol_set_lower.append(ch.lower())
-
-        self._build_vocab()
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred
 
     def get_num_parameters(self) -> int:
         """

@@ -95,7 +95,28 @@ class CausalLanguageModel(LanguageModel):
         # Are we a model that automatically inserts a start token that we need to get rid of
         self.drop_first_token = False
 
-        self.load()
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+        except BaseException:
+            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
+        self.vocab_size = self.tokenizer.vocab_size
+        try:
+            if self.lora:
+                self.model = AutoPeftModelForCausalLM.from_pretrained(self.lora_path)
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
+            if self.fp16 and self.device == "cuda":
+                self.model = self.model.half()
+        except:
+            raise InvalidLanguageModelException(
+                f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
+
+        self.model.eval()
+        self.model.to(self.device)
+        self.symbol_set_lower = []
+        for ch in self.symbol_set:
+            self.symbol_set_lower.append(ch.lower())
+        self._build_vocab()
 
     def _build_vocab(self) -> None:
         """
@@ -393,52 +414,6 @@ class CausalLanguageModel(LanguageModel):
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
 
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    def load(self) -> None:
-        """
-            Load the language model and tokenizer, initialize class variables
-        """
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
-        except BaseException:
-            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
-        self.vocab_size = self.tokenizer.vocab_size
-        try:
-            if self.lora:
-                self.model = AutoPeftModelForCausalLM.from_pretrained(self.lora_path)
-            else:
-                self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
-            if self.fp16 and self.device == "cuda":
-                self.model = self.model.half()
-        except:
-            raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
-
-#        if self.lora:
-#            try:
-#                config = PeftConfig.from_pretrained(self.lora_path)
-#                peft_model = PeftModel.from_pretrained(self.model, config)
-#                peft_model.set_adapter("lora")
-#                self.model = peft_model
-                #                self.model = peft_model.merge_and_unload()
-#                self.model.load_adapter(self.lora_path)
-#                self.model.enable_adapters()
-#            except:
-#                raise InvalidLanguageModelException(f"Failed to load LoRA adapter. Ensure {self.lora_path} is a valid LoRA adapter.")
-        
-        self.model.eval()
-
-        self.model.to(self.device)
-
-        self.symbol_set_lower = []
-
-        for ch in self.symbol_set:
-            self.symbol_set_lower.append(ch.lower())
-
-        self._build_vocab()
-
     def get_num_parameters(self) -> int:
         """
             Find out how many parameters the loaded model has
@@ -447,16 +422,3 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred

@@ -1,28 +1,24 @@
 """Defines the language model base class."""
 from abc import ABC, abstractmethod
 from typing import List, Tuple
-from string import ascii_uppercase
 
-# Eventually these should go away, but for now leaving to test existing code
-SPACE_CHAR = '_'
-BACKSPACE_CHAR = '<'
-
-
-# Eventually replace
-def alphabet():
-    """Alphabet.
-
-    Function used to standardize the symbols we use as alphabet.
-
-    Returns
-    -------
-        array of letters.
+def compute_max_hypo_len(left_context: str,
+                         max_word_len: int,
+                        ) -> int:
+    """Compute the maximum length of hypotheses based on existing prefix of word (if any)
+    :param left_context: Previous typed text including any prefix of the current word
+    :param max_word_len: Maximum length of word we want to predict
     """
-    return list(ascii_uppercase) + [BACKSPACE_CHAR, SPACE_CHAR]
-
+    prefix_len = 0
+    if len(left_context) > 0:
+        pos = len(left_context) - 1
+        while left_context[pos] != " " and pos >= 0:
+            pos -= 1
+            prefix_len += 1
+    return max(0, max_word_len - prefix_len)
 
 class LanguageModel(ABC):
-    """Parent class for Language Models."""
+    """Parent class for language model classes"""
 
     symbol_set: List[str] = None
 
@@ -72,20 +68,3 @@ class LanguageModel(ABC):
         :return: List of tuples with words and (optionally) their log probabilities
         """
         ...
-
-    @abstractmethod
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    @abstractmethod
-    def load(self) -> None:
-        """Restore model state from the provided checkpoint"""
-        ...
-
-    def reset(self) -> None:
-        """Reset language model state"""
-        ...
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """Update state by predicting and updating"""
