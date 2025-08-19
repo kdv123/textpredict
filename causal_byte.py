@@ -27,7 +27,6 @@ class CausalByteLanguageModel(LanguageModel):
                  lm_device: str = "cpu",
                  lm_left_context: str = "",
                  fp16: bool = False,
-                 case_simple: bool = False,
                  batch_size: int = None,
                  predict_lower: bool = True,
                 ):
@@ -41,7 +40,6 @@ class CausalByteLanguageModel(LanguageModel):
             lm_device          - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context    - text to condition start of sentence on
             fp16               - convert model to fp16 to save memory/compute on CUDA
-            case_simple        - simple fixing of left context case
             batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
             predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
         """
@@ -57,7 +55,6 @@ class CausalByteLanguageModel(LanguageModel):
         self.device = lm_device
         self.left_context = lm_left_context
         self.fp16 = fp16
-        self.case_simple = case_simple
         self.symbol_index_to_vocab_index = []
         self.batch_size = batch_size
         self.predict_lower = predict_lower

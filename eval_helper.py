@@ -419,7 +419,6 @@ def load_language_model(args: Namespace,
                                      lm_path=args.model_dir,
                                      lm_left_context=args.left_context,
                                      fp16=args.fp16,
-                                     case_simple=args.case_simple,
                                      batch_size=args.batch_size,
                                      predict_lower=args.predict_lower,
                                      )
