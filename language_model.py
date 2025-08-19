@@ -51,6 +51,27 @@ class LanguageModel(ABC):
         ...
 
     @abstractmethod
+    def predict_words(self,
+                      left_context: str,
+                      word_end_symbols: List[str] = None,
+                      nbest: int = None,
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
+                      return_log_probs=False) -> List:
+        """
+        Given some left text context, predict the most likely next words.
+        Left and right context use normal space character for any spaces, we convert internally to <sp>
+        :param left_context: previous text we are condition on, note this includes the prefix of the current word
+        :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
+        :param nbest: number of most likely words to return
+        :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_search_max: maximum number of hypotheses to track during each extension of search
+        :param return_log_probs: whether to return log probabilities of each word
+        :return: List of tuples with words and (optionally) their log probabilities
+        """
+        ...
+
+    @abstractmethod
     def update(self) -> None:
         """Update the model state"""
         ...

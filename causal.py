@@ -11,10 +11,10 @@ from scipy.special import softmax
 import time
 from collections import defaultdict
 from typing import Final
-from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
+from peft import AutoPeftModelForCausalLM
 
 class CausalLanguageModel(LanguageModel):
-    """Character language model based on a pre-trained causal model, GPT-2 by default."""
+    """Character language model based on a pre-trained causal transformer language model."""
 
     def __init__(self,
                  symbol_set: List[str],
@@ -27,6 +27,8 @@ class CausalLanguageModel(LanguageModel):
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
+                 batch_size: int = None,
+                 predict_lower: bool = True,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -41,6 +43,8 @@ class CausalLanguageModel(LanguageModel):
             max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
             lora               - use LoRA adapter
             lora_path          - load LoRA adapter from Hugging Face or local directory
+            batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
+            predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -58,6 +62,8 @@ class CausalLanguageModel(LanguageModel):
         self.max_completed = max_completed
         self.lora = lora
         self.lora_path = lora_path
+        self.batch_size = batch_size
+        self.predict_lower = predict_lower
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -198,6 +204,8 @@ class CausalLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
+
+        # TODO: add support for prediction of mixed case
 
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()

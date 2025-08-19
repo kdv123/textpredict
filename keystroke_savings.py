@@ -121,7 +121,8 @@ if __name__ == "__main__":
                 target_word = target_word.lower()
 
             # See if we should use a literal slot for this prediction (not used at start of words)
-            use_literal = args.literal_slot and token_index > 0 and phrase[token_index] != " "
+            #use_literal = args.literal_slot and token_index > 0 and phrase[token_index] != " "
+            use_literal = args.literal_slot and len(word_prefix) > 0
 
             # Use either the actual prefix of this sentence, or the context before symbols stripping
             if args.unstripped_context:
@@ -170,10 +171,10 @@ if __name__ == "__main__":
             print_words = ""
             for k, word in enumerate(words):
                 if word == target_word:
-                    print_words += f"{k}:{word.upper()}, "
+                    print_words += f"{k}:*{word}*, "
                 else:
                     print_words += f"{k}:{word}, "
-            print(f" predictions {print_words}, target '{target_word}', keys {phrase_keystrokes}")
+            print(f" predictions {print_words}target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:

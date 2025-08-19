@@ -60,6 +60,7 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--previous-max-len", type=int, help="Enable left context from previous phrases up to this many characters")
     parser.add_argument("--previous-add", type=str, default=" ", help="Text to add after last phrase when using context from previous phrases")
     parser.add_argument("--unstripped-context", action="store_true", default=False, help="Use left context before stripping of symbols")
+    parser.add_argument("--batch-size", type=int, help="Max batch size of inferences for transformer models")
 
 def check_args_for_errors(args: Namespace) -> None:
     """
@@ -99,6 +100,9 @@ def check_args_for_errors(args: Namespace) -> None:
         exit(1)
     if args.unstripped_context and not args.strip_symbols:
         print("ERROR: Using unstripped context requires --strip-symbols!", file = stderr)
+        exit(1)
+    if args.batch_size and not args.causal and not args.byte:
+        print("ERROR: --batch-size only applies to transformer models!", file = stderr)
         exit(1)
 
 def check_args_for_warnings(args: Namespace) -> None:
@@ -235,15 +239,6 @@ def _normalize_phrases(phrases: List[str],
             # Extra last one containing entire unstripped context
             index_to_unstripped.append(phrase)
             phrase = phrase_stripped
-# Old way of doing it
-#            phrase = re.sub(r'[^a-zA-Z \']', ' ', phrase)
-#            phrase = re.sub(r'\s+', ' ', phrase).strip()
-#            print(f"DEBUG: {orig_phrase} : '{phrase}' <-> '{phrase_stripped}' (len: {len(phrase_stripped)})")
-#            print(f"DEBUG: {len(index_to_unstripped)} {index_to_unstripped}")
-#            for i in range(len(phrase)):
-#                ch = phrase[i]
-#                print(f"DEBUG i {i}, ch '{ch}' -> '{index_to_unstripped[i]}'")
-#            assert(phrase == phrase_stripped)
 
         # It could be the case we normalized it to be blank
         if len(phrase) > 0:
@@ -413,7 +408,8 @@ def load_language_model(args: Namespace,
         lm = NGramLanguageModel(symbol_set=symbol_set,
                                 lm_path=args.ngram_lm,
                                 skip_symbol_norm=args.skip_norm,
-                                space_symbol=args.space_symbol)
+                                space_symbol=args.space_symbol,
+                                )
     elif args.byte:
         if not quiet:
             print(f"Loading byte LLM: {args.model_name}, model directory {args.model_dir}")
@@ -423,7 +419,10 @@ def load_language_model(args: Namespace,
                                      lm_path=args.model_dir,
                                      lm_left_context=args.left_context,
                                      fp16=args.fp16,
-                                     case_simple=args.case_simple)
+                                     case_simple=args.case_simple,
+                                     batch_size=args.batch_size,
+                                     predict_lower=args.predict_lower,
+                                     )
     elif args.causal:
         if not quiet:
             print(f"Loading causal LLM: {args.model_name}, model directory {args.model_dir}")
@@ -436,7 +435,10 @@ def load_language_model(args: Namespace,
                                  fp16=args.fp16,
                                  max_completed=args.max_completed,
                                  lora=args.lora,
-                                 lora_path=args.lora_path)
+                                 lora_path=args.lora_path,
+                                 batch_size=args.batch_size,
+                                 predict_lower=args.predict_lower,
+                                 )
 
     if not quiet:
         print(f"Model load time = {timer() - start:.2f}")

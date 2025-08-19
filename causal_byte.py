@@ -8,6 +8,7 @@ from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
 import heapq
+import numpy as np
 
 # This updates transformers 4.20.0 to be able to use the ByGPT5 tokenizer and model
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
@@ -27,7 +28,9 @@ class CausalByteLanguageModel(LanguageModel):
                  lm_left_context: str = "",
                  fp16: bool = False,
                  case_simple: bool = False,
-                 ):
+                 batch_size: int = None,
+                 predict_lower: bool = True,
+                ):
         """
         Initialize instance variables and load the language model with given path
         Args:
@@ -39,6 +42,8 @@ class CausalByteLanguageModel(LanguageModel):
             lm_left_context    - text to condition start of sentence on
             fp16               - convert model to fp16 to save memory/compute on CUDA
             case_simple        - simple fixing of left context case
+            batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
+            predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -54,6 +59,8 @@ class CausalByteLanguageModel(LanguageModel):
         self.fp16 = fp16
         self.case_simple = case_simple
         self.symbol_index_to_vocab_index = []
+        self.batch_size = batch_size
+        self.predict_lower = predict_lower
 
         # Taken from: https://github.com/potamides/uniformers/blob/main/examples/inference/lm_perplexity.py
         # We need to add this to be able to use ByGPT5 with AutoModel
@@ -137,7 +144,8 @@ class CausalByteLanguageModel(LanguageModel):
                 result_log_probs.append(float("-inf"))
         return result_log_probs
 
-    def predict_words(self,
+    # TODO: remove this old version of the method
+    def predict_words_old(self,
                       left_context: str,
                       word_end_symbols: List[str] = None,
                       nbest: int = None,
@@ -267,6 +275,169 @@ class CausalByteLanguageModel(LanguageModel):
                 result.append(word)
         return result
 
+    def predict_words(self,
+                      left_context: str,
+                      word_end_symbols: List[str] = None,
+                      nbest: int = None,
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
+                      return_log_probs = False) -> List:
+        """
+        Given some left text context, predict the most likely next words.
+        Left and right context use normal space character for any spaces, we convert internally to space symbol, e.g. <sp>
+        :param left_context: previous text we are condition on
+        :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
+        :param nbest: number of most likely words to return
+        :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_search_max: maximum number of hypotheses to track during each extension of search
+        :param return_log_probs: whether to return log probabilities of each word
+        :return: List of tuples with words and their log probabilities
+        """
+
+        # We want each language model class set its own default pruning values
+        # We want the client keystroke_savings.py to default to these if pruning switches aren't set
+        if beam_logp_best is None:
+            beam_logp_best = 5.0
+        if beam_search_max is None:
+            beam_search_max = 100
+
+        # Since List is a mutable type, we can't set a default reliably in the method declaration
+        # We'll set the default of a trailing space if caller didn't specify a list of right contexts
+        if word_end_symbols is None:
+            word_end_symbols = [" "]
+
+        # Create a symbol set that also includes any end of word symbols that aren't in our normal symbol set
+        # If any of the end symbols occur in the normal symbol set, we include at end of list
+        search_symbols = []
+        for symbol in self.symbol_set:
+            if symbol not in word_end_symbols:
+                # We'll add both an upper and lowercase version of this symbol
+                # since we want the search to consider any casing
+                if symbol.lower() != symbol.upper():
+                    search_symbols.append(symbol.lower())
+                    search_symbols.append(symbol.upper())
+                else:
+                    search_symbols.append(symbol)
+        index_first_end_symbol = len(search_symbols)
+        for end_symbol in word_end_symbols:
+            search_symbols.append(end_symbol)
+
+        # Create a parallel list of the token IDs for our search symbols
+        search_symbol_ids = [self._encode(symbol) for symbol in search_symbols]
+
+        tokens = []
+        tokens.extend(self.left_context_tokens)
+        # Don't extend if the context is empty, this avoids some models like byt5 from adding extra </s> at start
+        if len(left_context) > 0:
+            tokens.extend(self._encode(left_context))
+
+        # We store hypotheses in a list with a tuple (log_prob, current word characters, subword token sequence)
+        current_hypos = [(0.0, "", tokens)]
+
+        LOGP: Final[int] = 0
+        STR: Final[int] = 1
+        TOKENS: Final[int] = 2
+
+        pad_id = self.tokenizer.encode(self.tokenizer.pad_token)[0]
+
+        # Finished hypotheses map a word string (without ending symbols) to its log prob
+        # We use a dictionary since we may want to merge hypotheses that are the same word
+        finished_hypos = {}
+        best_finished_log_prob = float("-inf")
+
+        while len(current_hypos) > 0:
+            # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
+            next_hypos = []
+
+            # Go through all the current hypotheses loading into one or more mini-batches
+            hypo_index = 0
+            while hypo_index < len(current_hypos):
+                size = 0
+                max_length = 0
+                batch_tokens = []
+
+                # Remember the starting index for this minibatch
+                batch_start_index = hypo_index
+
+                # Add to the next mini-batch until we either run out of hypotheses or we hit mini-batch size
+                # Keep track of the maximum length hypothesis as we go through them
+                while (not self.batch_size or size < self.batch_size) and hypo_index < len(current_hypos):
+                    tokens = current_hypos[hypo_index][TOKENS]
+                    max_length = max(len(tokens), max_length)
+                    batch_tokens.append(tokens)
+                    size += 1
+                    hypo_index += 1
+
+                # Pad out every token sequence to make length and make the tensor for inference
+                batch_tensors = []
+                for tokens in batch_tokens:
+                    while len(tokens) < max_length:
+                        tokens.append(pad_id)
+                    batch_tensors.append(torch.tensor(tokens))
+                tokens_tensor = torch.stack(tuple(batch_tensors)).to(self.device)
+
+                with torch.no_grad():
+                    logits = self.model(tokens_tensor).logits  # shape (batch_size, max_length, 384)
+                    # We care about the logits in the last position of second dimension
+                    # We want to sum to one in the last dimension over the first dimensions (different hypotheses)
+                    log_probs = torch.log_softmax(logits[:, -1, :], dim=1).detach().cpu().numpy()
+
+                # For each hypothesis in the mini-batch, create a new next hypothesis for every character
+                # in the symbol set that isn't one of our end of word symbols.
+                # For end of word symbols, add the hypothesis to the finished_hypos dictionary.
+                for batch_index in range(len(log_probs)):
+                    for search_index, token_index in enumerate(search_symbol_ids):
+                        # Grab the corresponding hypothesis from the original set
+                        hypo = current_hypos[batch_start_index + batch_index]
+
+                        # Pull the log prob for the corresponding position in the inference and add to existing accumulated log prob
+                        new_log_prob = log_probs[batch_index, token_index] + hypo[LOGP]
+
+                        # We avoid adding finished or intermediate hypotheses if they are outside log prob beam
+                        # This is a bit faster than only doing it for intermediate hypotheses
+                        if (best_finished_log_prob - new_log_prob) < beam_logp_best:
+                            # See if we have finished by generating any of the valid right symbols
+                            # These were organized to be at the end of the list of search_symbols
+                            if search_index >= index_first_end_symbol:
+                                # NOTE: we don't add the ending symbol to the finished hypothesis
+                                # Optionally we marginalize all cases to predict just lowercase words
+                                if self.predict_lower:
+                                    word = hypo[STR].lower()
+                                else:
+                                    word = hypo[STR]
+
+                                if word in finished_hypos:
+                                    # If already had this word finish with a different end symbol we sum the probabilities
+                                    finished_hypos[word] = np.logaddexp(finished_hypos[word], new_log_prob)
+                                else:
+                                    # Haven't seen this word, we will just always add it to the dictionary
+                                    # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
+                                    finished_hypos[word] = new_log_prob
+                                # Update the current best log prob of any finishing hypothesis
+                                best_finished_log_prob = max(best_finished_log_prob, new_log_prob)
+
+                            # This hypothesis didn't finish
+                            # Keep if it is still within beam width of our best hypothesis thus far
+                            else:
+                                # This hypothesis is within the beam of the best to date
+                                # Extend by the text and token ID
+                                new_hypo = (new_log_prob, hypo[STR] + search_symbols[search_index], hypo[TOKENS] + token_index)
+                                if len(next_hypos) < beam_search_max:
+                                    # Add if we haven't reached our beam width limit so add
+                                    heapq.heappush(next_hypos, new_hypo)
+                                else:
+                                    # Or replace the worst hypotheses with the new one
+                                    heapq.heappushpop(next_hypos, new_hypo)
+
+            current_hypos = next_hypos
+
+        # Convert our dictionary of finished hypotheses to a sorted list
+        sorted_best = sorted(finished_hypos.items(), key=lambda item: item[1], reverse=True)[:nbest]
+
+        # Optional inclusion of log prob in result
+        return [(hypo[0], hypo[1]) if return_log_probs else hypo[0] for hypo in sorted_best]
+
+
     def predict(self, evidence: List[str]) -> List[Tuple]:
         """
         Given an evidence of typed string, predict the probability distribution of
@@ -279,7 +450,9 @@ class CausalByteLanguageModel(LanguageModel):
 
         assert self.model is not None, "language model does not exist!"
 
-        context = context = "".join(evidence)
+        context = "".join(evidence)
+
+        # TODO: add support for prediction of mixed case
 
         tokens = []
         tokens.extend(self.left_context_tokens)

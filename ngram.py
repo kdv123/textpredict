@@ -6,6 +6,8 @@ import kenlm
 import numpy as np
 import heapq
 
+# TODO: add support for mixed case n-gram models, currently assumes only lowercase plus punctuation
+
 class NGramLanguageModel(LanguageModel):
     """Character n-gram language model using the KenLM library for querying"""
 
@@ -128,7 +130,7 @@ class NGramLanguageModel(LanguageModel):
         # Note: Python's heap pops minimum value, so we are going to explore worst first.
         # Might be better to explore best first, but this is in conflict with the need to easily replace the worst hypothesis.
         while len(current_hypos) > 0:
-            # We'll store extended hypotheses in a min heap to make it easy to main only a fixed number of the best
+            # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
             next_hypos = []
 
             for hypo in current_hypos:
@@ -207,8 +209,6 @@ class NGramLanguageModel(LanguageModel):
                 score = self.model.BaseScore(self.state, token, self.state2)
             else:
                 self.model.BaseScore(self.state2, token, self.state)
-
-        next_char_pred = None
 
         # Generate the probability distribution based on the final state
         if len(context) % 2 == 0:
