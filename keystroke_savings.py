@@ -54,8 +54,7 @@ if __name__ == "__main__":
     phrase_file.close()
     # We may want to limit to only the first so many phrases
     if args.phrase_limit:
-        while len(phrases) > args.phrase_limit:
-            phrases.pop()
+        phrases = phrases[:args.phrase_limit]
     print(f"Number phrases loaded: {len(phrases)}")
 
     start = timer()
@@ -70,7 +69,7 @@ if __name__ == "__main__":
         device = "cuda"
 
     if args.lm:
-        print(f"Loading n-gram LM: {lm}")
+        print(f"Loading n-gram LM: {args.lm}")
         lm = NGramLanguageModel(symbols, args.lm, False)
     elif args.byte:
         if args.model_dir:
@@ -105,6 +104,7 @@ if __name__ == "__main__":
     total_chars = 0
     total_keystrokes = 0
     total_truncated = 0
+    skipped_empty = 0
 
     # Iterate over all the phrases
     total_predictions = 0
@@ -116,6 +116,11 @@ if __name__ == "__main__":
             phrase = phrase.lower()
         if args.strip:
             phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
+        # Skip completely empty phrases after cleaning
+        if len(phrase) == 0:
+            print(f"*** Phrase {i}: <EMPTY AFTER CLEANING>, len: 0 — skipping")
+            skipped_empty += 1
+            continue
 
         # Optionally we truncated phrases that are too long
         # This can avoid OOM for the LLM doing things in batches
@@ -179,12 +184,20 @@ if __name__ == "__main__":
 
             total_keystrokes += 1
             phrase_keystrokes += 1
-        ks = (len(phrase) - phrase_keystrokes) / len(phrase) * 100.0
+        # Safe even if something slipped through with zero-length (shouldn't, due to the skip above)
+        ks = ((len(phrase) - phrase_keystrokes) / len(phrase) * 100.0) if len(phrase) > 0 else 0.0
         print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
 
     print()
-    final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
+    final_ks = ((total_chars - total_keystrokes) / total_chars * 100.0) if total_chars > 0 else 0.0
     print(f"TRUNCATED: {total_truncated}")
     print(f"TIME: {timer() - start:.2f}")
-    print(f"SECS/PRED: {(timer() - prediction_start)/total_predictions:.4f}")
+    total_pred_time = (timer() - prediction_start)
+    if total_predictions > 0:
+        print(f"SECS/PRED: {total_pred_time/total_predictions:.4f}")
+    else:
+        print("SECS/PRED: n/a (no predictions)")
+        
     print(f"FINAL KS: {final_ks:.4f}")
+    if skipped_empty:
+        print(f"SKIPPED EMPTY PHRASES: {skipped_empty}")
