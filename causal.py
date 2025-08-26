@@ -567,11 +567,6 @@ class CausalLanguageModel(LanguageModel):
         # KDV, doesn't seem to be a reason to alias this variable
         #cap_completed = max_completed
 
-        # Stride used to implement mini-batches
-        batch_size_to_use = 1
-        if self.batch_size:
-            batch_size_to_use = self.batch_size
-
         # ---------------- Decoding loop (capped by steps) ----------------
         step = 0
         with torch.inference_mode():
@@ -586,6 +581,12 @@ class CausalLanguageModel(LanguageModel):
                 all_top_ids  = []
 
                 # ---- Batched forward pass over ragged sequences (pad + attention_mask) ----
+
+                # If no batch size, we do it all in one inference
+                batch_size_to_use = len(current_hypos)
+                if self.batch_size:
+                    batch_size_to_use = self.batch_size
+
                 for i in range(0, len(current_hypos), batch_size_to_use):
                     batch_seqs  = seqs[i:i + batch_size_to_use]
                     batch_logps = add_logps[i:i + batch_size_to_use]
