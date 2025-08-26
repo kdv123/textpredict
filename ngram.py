@@ -53,6 +53,7 @@ class NGramLanguageModel(LanguageModel):
                       beam_logp_best: float = None,
                       beam_search_max: int = None,
                       max_word_len: int = None,
+                      max_word_hypotheses: int = None,
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
@@ -63,8 +64,9 @@ class NGramLanguageModel(LanguageModel):
         :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
         :param beam_search_max: maximum number of hypotheses to track during each extension of search
         :param max_word_len: maximum length of words that can be predicted
-        :param return_log_probs: whether to return log probabilities of each word
-        :return: List of tuples with words and their log probabilities
+        :param max_word_hypotheses: stop search if we reach this many complete word prediction hypotheses
+        :param return_log_probs: whether to return log probs of each word
+        :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
 
         # We want each language model class set its own default pruning values
@@ -141,13 +143,19 @@ class NGramLanguageModel(LanguageModel):
         # Compute the maximum length of hypotheses based on existing prefix of word (if any)
         max_hypo_len = compute_max_hypo_len(left_context=left_context, max_word_len=max_word_len)
 
+        # Flag that breaks out of all loops
+        done = False
+
         # Note: Python's heap pops minimum value, so we are going to explore worst first.
         # Might be better to explore best first, but this is in conflict with the need to easily replace the worst hypothesis.
-        while len(current_hypos) > 0:
+        while len(current_hypos) > 0 and not done:
             # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
             next_hypos = []
 
-            for hypo in current_hypos:
+            hypo_index = 0
+            while hypo_index < len(current_hypos) and not done:
+                hypo = current_hypos[hypo_index]
+
                 # Extend this hypothesis by all possible symbols
                 # This could include symbols that were specified to end words but aren't valid character inside of words
                 for i in range(len(search_symbols)):
@@ -169,6 +177,11 @@ class NGramLanguageModel(LanguageModel):
                                 # Haven't seen this word, we will just always add it to the dictionary
                                 # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
                                 finished_hypos[hypo[STR]] = new_log_prob
+
+                                # Stop the search if we hit a hard cap on distinct completed word hypotheses
+                                if max_word_hypotheses and len(finished_hypos) >= max_word_hypotheses:
+                                    done = True
+                                    break
                             # Update the current best log prob of any finishing hypothesis
                             best_finished_log_prob = max(best_finished_log_prob, new_log_prob)
                         # This hypothesis didn't finish
@@ -182,6 +195,7 @@ class NGramLanguageModel(LanguageModel):
                             else:
                                 # Or replace the worst hypotheses with the new one
                                 heapq.heappushpop(next_hypos, (new_log_prob, hypo[STR] + search_symbols[i], temp_out_state.__copy__()))
+                hypo_index += 1
             current_hypos = next_hypos
 
         # Convert our dictionary of finished hypotheses to a sorted list

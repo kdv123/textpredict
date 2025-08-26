@@ -24,6 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
     parser.add_argument("--max-word-len", type=int, help="Max length of words to predict")
+    parser.add_argument("--max-word-hypotheses", type=int, help="Stop search when we hit this many word hypotheses")
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
@@ -147,6 +148,7 @@ if __name__ == "__main__":
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols,
                                      max_word_len=args.max_word_len,
+                                     max_word_hypotheses=args.max_word_hypotheses,
                                      )
 
             # predict_words only returns the text that completes the current left_context

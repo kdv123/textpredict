@@ -35,11 +35,10 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--num-cores", type=int, help="Limit pytorch to specified number of cores")
     parser.add_argument("--ngram-lm", help="N-gram model to load")
     parser.add_argument("--ngram", action="store_true", help="Use n-gram language model")
-    parser.add_argument("--causal", action="store_true", help="Use causal LLM")
-    parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
+    parser.add_argument("--causal", action="store_true", help="Use subword tokenized LLM")
+    parser.add_argument("--byte", action="store_true", help="Use byte tokenized LLM")
     parser.add_argument("--model-name", help="Model name of LLM")
     parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
-    parser.add_argument("--lora", action="store_true", default=False, help="Use LoRA adapter with base model")
     parser.add_argument("--lora-path", help="Hugging Face or local path to LoRA adapter")
     parser.add_argument("--out-stats", help="Output summary stats to this tab delimited file")
     parser.add_argument("--out-extra", action="append", dest="out_extra_cols", help="Output additional column to stats file, format: COLUMN_NAME,VALUE")
@@ -61,6 +60,8 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--previous-add", type=str, default=" ", help="Text to add after last phrase when using context from previous phrases")
     parser.add_argument("--unstripped-context", action="store_true", default=False, help="Use left context before stripping of symbols")
     parser.add_argument("--batch-size", type=int, help="Max batch size of inferences for transformer models")
+    parser.add_argument("--beam-width", type=int, help="Search beam width for character predictions, subword LLM, recommended value = 8")
+    parser.add_argument("--max-completed", type=int, help="Stop character prediction search after this many completed hypotheses, subword LLM, recommended value = 32000")
 
 def check_args_for_errors(args: Namespace) -> None:
     """
@@ -86,12 +87,6 @@ def check_args_for_errors(args: Namespace) -> None:
             if len(cols) != 2:
                 print(f"ERROR: Invalid comma separated pair in --out-extra: {extra}!", file = stderr)
                 exit(1)
-    if args.lora and not args.causal:
-        print("ERROR: LoRA adapter is only currently supported for causal model!", file = stderr)
-        exit(1)
-    if args.lora and not args.lora_path:
-        print("ERROR: To use a LoRA adapter you must specify the adapter path using --lora-path. --model-name specifies the base model!", file = stderr)
-        exit(1)
     if args.left_context and args.left_context_file:
         print("ERROR: Only one of --left-context or --left-context-file can be specified!", file = stderr)
         exit(1)
@@ -103,6 +98,12 @@ def check_args_for_errors(args: Namespace) -> None:
         exit(1)
     if args.batch_size and not args.causal and not args.byte:
         print("ERROR: --batch-size only applies to transformer models!", file = stderr)
+        exit(1)
+    if not args.causal and (args.max_completed or args.beam_width):
+        print("ERROR: only subword LLM needs --max-completed or --beam-width set!", file = stderr)
+        exit(1)
+    if not args.causal and args.lora_path:
+        print(f"ERROR: LoRA supported only for subword LLM!", file = stderr)
         exit(1)
 
 def check_args_for_warnings(args: Namespace) -> None:
@@ -116,6 +117,8 @@ def check_args_for_warnings(args: Namespace) -> None:
         print(f"WARNING: Unless you have a mixed case n-gram model, you should set --lower!", file = stderr)
     if args.ngram and args.case_simple:
         print(f"WARNING: Unless you have a mixed case n-gram model, you should not set --case-simple!", file = stderr)
+    if args.causal and not args.max_completed and not args.beam_width:
+        print(f"WARNING: Using subword LLM without any pruning via --max-completed or --beam-width, this can make character predictions slow!")
 
 def _load_phrases_plaintext(filename: str,
                             phrase_limit: int = None) -> List[str]:
@@ -433,7 +436,6 @@ def load_language_model(args: Namespace,
                                  beam_width=args.beam_width,
                                  fp16=args.fp16,
                                  max_completed=args.max_completed,
-                                 lora=args.lora,
                                  lora_path=args.lora_path,
                                  batch_size=args.batch_size,
                                  predict_lower=args.predict_lower,

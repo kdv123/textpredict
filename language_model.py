@@ -54,6 +54,7 @@ class LanguageModel(ABC):
                       beam_logp_best: float = None,
                       beam_search_max: int = None,
                       max_word_len: int = None,
+                      max_word_hypotheses: int = None,
                       return_log_probs=False) -> List:
         """
         Given some left text context, predict the most likely next words.
@@ -64,7 +65,8 @@ class LanguageModel(ABC):
         :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
         :param beam_search_max: maximum number of hypotheses to track during each extension of search
         :param max_word_len: maximum length of words that can be predicted
-        :param return_log_probs: whether to return log probabilities of each word
-        :return: List of tuples with words and (optionally) their log probabilities
+        :param max_word_hypotheses: stop search if we reach this many complete word prediction hypotheses
+        :param return_log_probs: whether to return log probs of each word
+        :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
         ...

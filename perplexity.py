@@ -35,8 +35,6 @@ if __name__ == "__main__":
     parser.add_argument("--mix-byte", action="store_true", help="Use mixture of n-gram and byte LLM")
     parser.add_argument("--ngram-mix", type=float, default=0.5, help="Weight for n-gram in mixture model")
     parser.add_argument("--time-outliers", action="store_true", help="Print time outliers at end")
-    parser.add_argument("--beam-width", type=int, help="Search beam width for causal LM, recommended value = 8")
-    parser.add_argument("--max-completed", type=int, help="Stop causal LM search after this many completed hypotheses, recommended value = 32000")
     parser.add_argument("--ppl-file", help="Output sentence and ppl to a file")
     parser.add_argument("--symbol-file", help="Output symbol log probs to a file")
     parser.add_argument("--json-file", help="Output overall model data to JSON file with specified file name.")

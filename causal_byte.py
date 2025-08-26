@@ -167,6 +167,7 @@ class CausalByteLanguageModel(LanguageModel):
                       beam_logp_best: float = None,
                       beam_search_max: int = None,
                       max_word_len: int = None,
+                      max_word_hypotheses: int = None,
                       return_log_probs = False) -> List:
         """
         Given some left text context, predict the most likely next words.
@@ -177,8 +178,9 @@ class CausalByteLanguageModel(LanguageModel):
         :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
         :param beam_search_max: maximum number of hypotheses to track during each extension of search
         :param max_word_len: maximum length of words that can be predicted
-        :param return_log_probs: whether to return log probabilities of each word
-        :return: List of tuples with words and their log probabilities
+        :param max_word_hypotheses: stop search if we reach this many complete word prediction hypotheses
+        :param return_log_probs: whether to return log probs of each word
+        :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
 
         # We want each language model class set its own default pruning values
@@ -237,13 +239,16 @@ class CausalByteLanguageModel(LanguageModel):
         # Compute the maximum length of hypotheses based on existing prefix of word (if any)
         max_hypo_len = compute_max_hypo_len(left_context=left_context, max_word_len=max_word_len)
 
-        while len(current_hypos) > 0:
+        # Flag that breaks out of all loops
+        done = False
+
+        while len(current_hypos) > 0 and not done:
             # We'll store extended hypotheses in a min heap to make it easy to maintain only a fixed number of the best
             next_hypos = []
 
             # Go through all the current hypotheses loading into one or more mini-batches
             hypo_index = 0
-            while hypo_index < len(current_hypos):
+            while hypo_index < len(current_hypos) and not done:
                 size = 0
                 max_length = 0
                 batch_tokens = []
@@ -277,7 +282,8 @@ class CausalByteLanguageModel(LanguageModel):
                 # For each hypothesis in the mini-batch, create a new next hypothesis for every character
                 # in the symbol set that isn't one of our end of word symbols.
                 # For end of word symbols, add the hypothesis to the finished_hypos dictionary.
-                for batch_index in range(len(log_probs)):
+                batch_index = 0
+                while batch_index < len(log_probs) and not done:
                     for search_index, token_index in enumerate(search_symbol_ids):
                         # Grab the corresponding hypothesis from the original set
                         hypo = current_hypos[batch_start_index + batch_index]
@@ -306,6 +312,11 @@ class CausalByteLanguageModel(LanguageModel):
                                     # Haven't seen this word, we will just always add it to the dictionary
                                     # It would be expensive to maintain a fixed dictionary size of the best finished hypotheses
                                     finished_hypos[word] = new_log_prob
+
+                                    # Stop the search if we hit a hard cap on distinct completed word hypotheses
+                                    if max_word_hypotheses and len(finished_hypos) >= max_word_hypotheses:
+                                        done = True
+                                        break
                                 # Update the current best log prob of any finishing hypothesis
                                 best_finished_log_prob = max(best_finished_log_prob, new_log_prob)
 
@@ -321,6 +332,7 @@ class CausalByteLanguageModel(LanguageModel):
                                 else:
                                     # Or replace the worst hypotheses with the new one
                                     heapq.heappushpop(next_hypos, new_hypo)
+                    batch_index += 1
 
             current_hypos = next_hypos
 
