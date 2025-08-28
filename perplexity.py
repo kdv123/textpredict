@@ -11,7 +11,7 @@
 # This is a cleaned up version of the lm_eval.py script
 
 from mixture import MixtureLanguageModel
-from classifier import ClassifierLanguageModel
+#from classifier import ClassifierLanguageModel
 from math import log10
 from timeit import default_timer as timer
 from argparse import ArgumentParser
@@ -117,17 +117,17 @@ if __name__ == "__main__":
                                             },
                                             {"lm_path": args.ngram_lm}])
         print(f"Model load time = {timer() - start:.2f}")
-    elif args.classifier:
-        print(f"Loading classifier model: {args.model_name}, model directory {args.model_dir}")
-        lm = ClassifierLanguageModel(symbol_set=symbol_set,
-                                     lang_model_name=args.model_name,
-                                     lm_path=args.model_dir,
-                                     lm_device=device,
-                                     lm_left_context=args.left_context,
-                                     beam_width=args.beam_width,
-                                     fp16=args.fp16,
-                                     mixed_case_context=args.mixed_case_context)
-        print(f"Model load time = {timer() - start:.2f}")
+#    elif args.classifier:
+#        print(f"Loading classifier model: {args.model_name}, model directory {args.model_dir}")
+#        lm = ClassifierLanguageModel(symbol_set=symbol_set,
+#                                     lang_model_name=args.model_name,
+#                                     lm_path=args.model_dir,
+#                                     lm_device=device,
+#                                     lm_left_context=args.left_context,
+#                                     beam_width=args.beam_width,
+#                                     fp16=args.fp16,
+#                                     mixed_case_context=args.mixed_case_context)
+#        print(f"Model load time = {timer() - start:.2f}")
     else:
         lm = eval_helper.load_language_model(args=args,
                                              symbol_set=symbol_set,
