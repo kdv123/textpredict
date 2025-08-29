@@ -456,10 +456,11 @@ class CausalLanguageModel(LanguageModel):
         # topk_next       -> changed to beam_search_max
         # prune_margin    -> changed to beam_logp_best
 
-        # TODO: this implementation ignores word_end_symbols
-        # TODO: this implementation ignores max_word_len
+        # TODO: This implementation ignores word_end_symbols
+        # TODO: This implementation ignores max_word_len
+        # TODO: I don't think this handles mixed case predictions only lowercase
 
-        # TODO: these two parameters shouldn't be hardcoded
+        # TODO: These two parameters shouldn't be hardcoded
         max_search_steps = 12
         topk_first = 1024
 
@@ -476,6 +477,11 @@ class CausalLanguageModel(LanguageModel):
         # We'll set the default of a trailing space if caller didn't specify a list of right contexts
         if word_end_symbols is None:
             word_end_symbols = [" "]
+
+        # Create a hash set to quickly determine if character is in the set of end characters
+        is_word_end = set()
+        for symbol in word_end_symbols:
+            is_word_end.add(symbol)
 
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
@@ -557,6 +563,27 @@ class CausalLanguageModel(LanguageModel):
             t = CLOSERS_RE.sub('', TRAIL_PUNCT_RE.sub('', t))
             t = t.strip().lower()
             return t if ALNUM_RE.search(t) else ""
+
+        def canonicalize_word_from_suffix_new(raw_suffix: str) -> str:
+            """
+            Return the word prior to hitting on of the specified end of word symbols
+            """
+
+            # Scan right looking for any character in the end of word set of characters
+            ch_index = 0
+            found_alpha = False
+            while ch_index < len(raw_suffix):
+                ch = raw_suffix[ch_index]
+                if not found_alpha and ch.isalpha():
+                    found_alpha = True
+                if ch in is_word_end:
+                    break
+                ch_index += 1
+            # We need to have found a letter but also must have found an end symbol
+            if found_alpha and ch_index < len(raw_suffix):
+                return raw_suffix[:ch_index].lower()
+            else:
+                return ""
 
         # ---------------- Beam search state ----------------
         LOGP, SEQ = 0, 1
@@ -669,6 +696,9 @@ class CausalLanguageModel(LanguageModel):
 
                         if completed_now:
                             canonical = canonicalize_word_from_suffix(suffix_for_prefix)
+                            #canonical2 = canonicalize_word_from_suffix_new(suffix_for_prefix)
+                            #if canonical != canonical2:
+                            #    print(f"DEBUG, '{suffix_for_prefix}' -> '{canonical}' != '{canonical2}'")
                             if not canonical:
                                 # No meaningful token after boundary
                                 continue

@@ -13,6 +13,7 @@ conda install pytorch torchvision torchaudio pytorch-cuda cuda mpi4py -c pytorch
 pip install 'git+https://github.com/potamides/uniformers.git#egg=uniformers'
 pip install --upgrade transformers
 pip install kenlm==0.1 --global-option="--max_order=12"
+pip install py-cpuinfo
 pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate peft
 ```
 
