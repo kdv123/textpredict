@@ -544,25 +544,25 @@ class CausalLanguageModel(LanguageModel):
         allowed_first_tensor = torch.tensor(allowed_first, device=self.device, dtype=torch.long)
 
         # ---------------- Boundary & canonicalization helpers ----------------
-        TRAIL_PUNCT_RE = re.compile(r'[\.!\?…,:;]+$')
-        CLOSERS_RE     = re.compile(r'[\)\]\}\"\'”’]+$')
-        ALNUM_RE       = re.compile(r"[A-Za-z0-9]")
+        #TRAIL_PUNCT_RE = re.compile(r'[\.!\?…,:;]+$')
+        #CLOSERS_RE     = re.compile(r'[\)\]\}\"\'”’]+$')
+        #ALNUM_RE       = re.compile(r"[A-Za-z0-9]")
 
-        def canonicalize_word_from_suffix(raw_suffix: str) -> str:
-            """
-            Given the raw decoded suffix (no tokens from the fixed left context),
-            return canonical word key:
-              - if a space is present, take up to the first space
-              - strip trailing punctuation and closers
-              - lowercase
-              - require at least one alnum
-            """
-            t = raw_suffix
-            if ' ' in t:
-                t = t.split(' ')[0]
-            t = CLOSERS_RE.sub('', TRAIL_PUNCT_RE.sub('', t))
-            t = t.strip().lower()
-            return t if ALNUM_RE.search(t) else ""
+        #def canonicalize_word_from_suffix(raw_suffix: str) -> str:
+        #    """
+        #    Given the raw decoded suffix (no tokens from the fixed left context),
+        #    return canonical word key:
+        #      - if a space is present, take up to the first space
+        #      - strip trailing punctuation and closers
+        #     - lowercase
+        #      - require at least one alnum
+        #    """
+        #    t = raw_suffix
+        #    if ' ' in t:
+        #        t = t.split(' ')[0]
+        #    t = CLOSERS_RE.sub('', TRAIL_PUNCT_RE.sub('', t))
+        #    t = t.strip().lower()
+        #    return t if ALNUM_RE.search(t) else ""
 
         def canonicalize_word_from_suffix_new(raw_suffix: str) -> str:
             """
@@ -687,18 +687,34 @@ class CausalLanguageModel(LanguageModel):
                         # Completion on boundary:
                         #   - There is a space *anywhere* in the decoded suffix (means a word boundary)
                         #   - Or suffix ends with terminal punctuation and/or closers
-                        completed_now = False
-                        if ' ' in suffix_for_prefix:
-                            # leading space was present -> boundary hit
-                            completed_now = True
-                        elif TRAIL_PUNCT_RE.search(suffix_for_prefix) or CLOSERS_RE.search(suffix_for_prefix):
-                            completed_now = True
+#                        completed_now = False
+#                        if ' ' in suffix_for_prefix:
+#                            # leading space was present -> boundary hit
+#                            completed_now = True
+#                        elif TRAIL_PUNCT_RE.search(suffix_for_prefix) or CLOSERS_RE.search(suffix_for_prefix):
+#                            completed_now = True
+#                        if completed_now:
+#
+#                            canonical = canonicalize_word_from_suffix_new(suffix_for_prefix)
+#                            if not canonical:
+#                                # No meaningful token after boundary
+#                                continue
 
-                        if completed_now:
-                            canonical = canonicalize_word_from_suffix_new(suffix_for_prefix)
-                            if not canonical:
-                                # No meaningful token after boundary
-                                continue
+                        # Scan right looking for any character in the end of word set of characters
+                        ch_index = 0
+                        found_alpha = False
+                        found_word_end = False
+                        while ch_index < len(suffix_for_prefix):
+                            ch = suffix_for_prefix[ch_index]
+                            if not found_alpha and ch.isalpha():
+                                found_alpha = True
+                            if ch in is_word_end:
+                                found_word_end = True
+                                break
+                            ch_index += 1
+
+                        if found_alpha and found_word_end:
+                            canonical = suffix_for_prefix[:ch_index].lower()
 
                             # Merge duplicates via stable logaddexp
                             prev = completed_words.get(canonical)
