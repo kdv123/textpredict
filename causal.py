@@ -695,10 +695,7 @@ class CausalLanguageModel(LanguageModel):
                             completed_now = True
 
                         if completed_now:
-                            canonical = canonicalize_word_from_suffix(suffix_for_prefix)
-                            #canonical2 = canonicalize_word_from_suffix_new(suffix_for_prefix)
-                            #if canonical != canonical2:
-                            #    print(f"DEBUG, '{suffix_for_prefix}' -> '{canonical}' != '{canonical2}'")
+                            canonical = canonicalize_word_from_suffix_new(suffix_for_prefix)
                             if not canonical:
                                 # No meaningful token after boundary
                                 continue
