@@ -551,12 +551,12 @@ class CausalLanguageModel(LanguageModel):
 
         # ------------ Decoding loop ------------
         step = 0
-        max_search_steps = 12        # your original setting
-        topk_first = 1024            # your original setting
+        max_search_steps = 12        # original setting
+        topk_first = 1024            # original setting
 
         with torch.inference_mode():
             while current_hypos and step < max_search_steps:
-                current_hypos.sort(reverse=True)  # highest first
+                current_hypos.sort(key=lambda t: t[0], reverse=True)  # highest first
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
 
