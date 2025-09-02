@@ -427,7 +427,7 @@ class CausalLanguageModel(LanguageModel):
         if nbest is None:
             nbest = 3
 
-        # Advisor’s boundary set (can be overridden by --word-end)
+        # boundary set (can be overridden by --word-end)
         if word_end_symbols is None:
             word_end_symbols = [" ", ",", ".", "?", "!"]
 
@@ -556,7 +556,8 @@ class CausalLanguageModel(LanguageModel):
 
         with torch.inference_mode():
             while current_hypos and step < max_search_steps:
-                current_hypos.sort(key=lambda t: t[0], reverse=True)  # highest first
+                # Highest-first helps pruning decisions; sort by logp only
+                current_hypos.sort(key=lambda t: t[0], reverse=True)  
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
 
