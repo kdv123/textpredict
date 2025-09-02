@@ -1,26 +1,20 @@
-import numpy as np
 import torch
 from typing import List, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import itertools
 import heapq
-from language_model import LanguageModel
-from language_model import BACKSPACE_CHAR, SPACE_CHAR
+from language_model import LanguageModel, compute_max_hypo_len
 from exceptions import InvalidLanguageModelException
 from scipy.special import logsumexp
 from scipy.special import softmax
 import time
 from collections import defaultdict
 from typing import Final
-#from peft import PeftModel, PeftConfig, AutoPeftModelForCausalLM
+from peft import AutoPeftModelForCausalLM
 import math
 import re
-from nltk.corpus import words as all_words
-import nltk
-nltk.download('words')
-nltk.download('brown')
+
 class CausalLanguageModel(LanguageModel):
-    """Character language model based on a pre-trained causal model, GPT-2 by default."""
+    """Character language model based on a pre-trained causal transformer language model."""
 
     def __init__(self,
                  symbol_set: List[str],
@@ -30,11 +24,11 @@ class CausalLanguageModel(LanguageModel):
                  lm_left_context: str = "",
                  beam_width: int = None,
                  fp16: bool = False,
-                 mixed_case_context: bool = False,
-                 case_simple: bool = False,
                  max_completed: int = None,
                  lora: bool = False,
                  lora_path: str = "",
+                 batch_size: int = None,
+                 predict_lower: bool = True,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -44,13 +38,12 @@ class CausalLanguageModel(LanguageModel):
             lm_path            - load fine-tuned model from specified directory
             lm_device          - device to use for making predictions (cpu, mps, or cuda)
             lm_left_context    - text to condition start of sentence on
-            beam_width         - how many hypotheses to keep during the search, None=off
+            beam_width         - how many hypotheses to keep during the search, None=off (for character prediction method only)
             fp16               - convert model to fp16 to save memory/compute on CUDA
-            mixed_case_context - use mixed case for language model left context
-            case_simple        - simple fixing of left context case
-            max_completed      - stop search once we reach this many completed hypotheses, None=don't prune
-            lora               - use LoRA adapter
+            max_completed      - stop search once we reach this many completed hypotheses, None=don't prune (for character prediction method only)
             lora_path          - load LoRA adapter from Hugging Face or local directory
+            batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
+            predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -65,25 +58,15 @@ class CausalLanguageModel(LanguageModel):
         self.device = lm_device
         self.left_context = lm_left_context
         self.fp16 = fp16
-        self.mixed_case_context = mixed_case_context
-        self.case_simple = case_simple
         self.max_completed = max_completed
-        self.lora = lora
         self.lora_path = lora_path
+        self.batch_size = batch_size
+        self.predict_lower = predict_lower
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
         self.valid_vocab_set = None
         self.vocab_set = defaultdict(set)
-
-        if lora and not lora_path:
-            print(f"ERROR: Must specify path to LoRA adapter")
-            exit(1)
-
-        if not max_completed and not beam_width:
-            print(f"WARNING: using causal language model without any pruning, this can be slow!")
-        else:
-            print(f"Causal language model, beam_width {beam_width}, max_completed {max_completed}")
 
         # We optionally load the model from a local directory, but if this is not
         # specified, we load a Hugging Face model
@@ -93,22 +76,35 @@ class CausalLanguageModel(LanguageModel):
         # Parameters for the search
         self.beam_width = beam_width
 
-        # Simple heuristic to correct case in the LM context
-        self.simple_upper_words = {"i": "I",
-                                    "i'll": "I'll",
-                                    "i've": "I've",
-                                    "i'd": "I'd",
-                                    "i'm": "I'm"}
-
         # Track how much time spent in different parts of the predict function
         self.predict_total_ns = 0
         self.predict_inference_ns = 0
 
-
         # Are we a model that automatically inserts a start token that we need to get rid of
         self.drop_first_token = False
 
-        self.load()
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+        except BaseException:
+            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
+        self.vocab_size = self.tokenizer.vocab_size
+        try:
+            if self.lora_path:
+                self.model = AutoPeftModelForCausalLM.from_pretrained(self.lora_path)
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
+            if self.fp16 and self.device == "cuda":
+                self.model = self.model.half()
+        except:
+            raise InvalidLanguageModelException(
+                f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
+
+        self.model.eval()
+        self.model.to(self.device)
+        self.symbol_set_lower = []
+        for ch in self.symbol_set:
+            self.symbol_set_lower.append(ch.lower())
+        self._build_vocab()
 
     def _build_vocab(self) -> None:
         """
@@ -126,13 +122,7 @@ class CausalLanguageModel(LanguageModel):
             # Check if all the characters in the subword token are in our valid symbol set
             valid = True
             for ch in word_lower:
-                # The space char is only valid once we convert spaces to the space char
-                if ch == SPACE_CHAR:
-                    valid = False
-                    break
-                if ch == ' ':
-                    continue
-                elif ch not in self.symbol_set_lower:
+                if ch not in self.symbol_set_lower:
                     valid = False
                     break
 
@@ -141,7 +131,7 @@ class CausalLanguageModel(LanguageModel):
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
                 for j in range(len(word)):
-                    key = word_lower[0:j + 1].replace(' ', SPACE_CHAR)
+                    key = word_lower[0:j + 1]
                     self.vocab[key] += i,
                     # Construct set for prefix of the word
                     self.vocab_set[key].add(i)
@@ -224,47 +214,24 @@ class CausalLanguageModel(LanguageModel):
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
 
+        # TODO: add support for prediction of mixed case
+
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
-        context = converted_context.replace(SPACE_CHAR, ' ')
-
-        # If using the simple case feature, we need to go through the actual
-        # left context and capitalize the first letter in the sentence as
-        # well as any word in our list of words that should be capitalized.
-        if self.case_simple and len(context) > 0:
-            cased_context = ""
-            words = context.split()
-            for i, word in enumerate(words):
-                if i == 0 and word[0] >= 'a' and word[0] <= 'z':
-                    word = word[0].upper() + word[1:]
-                if i > 0:
-                    if word in self.simple_upper_words:
-                        word = self.simple_upper_words[word]
-                    cased_context += " "
-                cased_context += word
-            # Handle ending space in the context
-            if context[-1] == ' ':
-                cased_context += " "
-            context = cased_context
-
-        context_lower = context.lower()
+        context = converted_context
 
         # Index in the hypothesis string that is the next character after our context
-        target_pos = len(context_lower)
+        target_pos = len(context)
 
         # For stats purposes track length of the prefix we are extending from space to match
         # prefix_len = target_pos
 
         # Look for the last space in the context, or -1 if no begin_text in context yet
-        pos = context_lower.rfind(" ")
+        pos = context.rfind(" ")
         tokens = []
         tokens.extend(self.left_context_tokens)
         if pos >= 0:
-            # Optionally, we condition on upper and lower case left context
-            if self.mixed_case_context:
-                truncated_context = context[0:pos]
-            else:
-                truncated_context = context_lower[0:pos]
+            truncated_context = context[0:pos]
             tokens.extend(self._encode(truncated_context))
 
         # Constant indexes for use with the hypotheses tuples
@@ -352,7 +319,7 @@ class CausalLanguageModel(LanguageModel):
                     # We may need to use a subword token that doesn't completely consume the remaining text.
                     # Find these by tokenizing all possible lengths of text starting from the current position.
                     for i in range(1, len(remaining_context)):
-                        tokenization = self._encode(context_lower[current[LEN]:current[LEN] + i])
+                        tokenization = self._encode(context[current[LEN]:current[LEN] + i])
                         # Ignore tokenizations involving multiple tokens since they involve an ID we would have already added.
                         if len(tokenization) == 1:
                             #extra_vocab += tokenization[0],
@@ -409,11 +376,7 @@ class CausalLanguageModel(LanguageModel):
         # Parallel array to symbol_set for storing the marginals
         char_probs = []
         for ch in self.symbol_set_lower:
-            # Convert space to the underscore used in BciPy
-            if ch == SPACE_CHAR:
-                target_ch = ' '
-            else:
-                target_ch = ch
+            target_ch = ch
 
             # Handle cases when symbols are never seen
             if target_ch in char_to_log_probs:
@@ -426,95 +389,109 @@ class CausalLanguageModel(LanguageModel):
 
         next_char_pred = {}
         for i, ch in enumerate(self.symbol_set_lower):
-            if ch is SPACE_CHAR:
-                next_char_pred[ch] = char_probs[i]
-            else:
-                next_char_pred[ch.upper()] = char_probs[i]
-        next_char_pred[BACKSPACE_CHAR] = 0.0
+            next_char_pred[ch] = char_probs[i]
 
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
 
         return list(sorted(next_char_pred.items(), key=lambda item: item[1], reverse=True))
 
-
     def predict_words(self,
-                     evidence: List[str],
-                     nbest: int,
-                     beam: int,
-                     max_new_tokens: int = 12,      # 5 was too small; 10–12 is safer
-                     max_completed: int = 32,        # distinct words
-                     batch_size: int = 32,
-                     topk_first: int = 1024,         # top-K within the allowed-first subset
-                     topk_next: int = 10,            # top-K on subsequent steps
-                     prune_margin: float = 5.0) -> List[str]:
+                      left_context: str,
+                      word_end_symbols: List[str] = None,
+                      nbest: int = None,
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
+                      max_word_len: int = None,
+                      max_word_hypotheses: int = None,
+                      return_log_probs: bool = False) -> List:
         """
-        Next-word prediction for subword LMs (GPT-2/OPT/...).
+        Given some left text context, predict the most likely next words.
 
         Behavior:
-          - A word only finishes at a boundary: a space OR terminal punctuation (., !, ?, …),
-            optionally followed by closers (") ’ ) ] }.
-          - Punctuation variants of the same word are merged into a single canonical key ('cat', 'cat!!!' -> 'cat').
-          - No dictionary/lexicon gating; coverage is left to the model.
-          - First token is restricted by the typed prefix *before* top-K (prevents dropping the right path).
-
-        Returns:
-          Top-N distinct next-word strings ranked by merged log-prob.
+          • A word completes when we hit any symbol in `word_end_symbols`
+            (default: space, ',', '.', '?', '!'), wherever it occurs.
+          • Duplicates are merged (logaddexp) under a lowercase canonical key.
+          • Returns only the suffix beyond the typed prefix (keystroke_savings.py
+            adds the prefix back).
         """
+
+        # ------------ Defaults & guards ------------
+        # Recommended defaults, consistent with the other LMs
+        if beam_logp_best is None:
+            beam_logp_best = 5.0
+        if beam_search_max is None:
+            beam_search_max = 100
+        if max_word_len is None:
+            max_word_len = 50
+        if nbest is None:
+            nbest = 3
+
+        # Advisor’s boundary set (can be overridden by --word-end)
+        if word_end_symbols is None:
+            word_end_symbols = [" ", ",", ".", "?", "!"]
+
+        # Fast membership test for boundaries
+        end_chars = set(word_end_symbols)
+
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
-        self.beam_width = beam
 
-        # ---------------- Context & prefix ----------------
-        converted_context = "".join(evidence)
-        context = converted_context.replace(SPACE_CHAR, ' ')
-
-        # Split typed context at the last space to obtain current word prefix
-        pos = context.rfind(" ")
-
+        # ------------ Context & typed prefix ------------
+        pos = left_context.rfind(" ")
         tokens = list(self.left_context_tokens)
         if pos >= 0:
-            word_prefix = context[pos + 1:]
-            tokens.extend(self._encode(context[:pos]))
+            word_prefix = left_context[pos + 1:]
+            tokens.extend(self._encode(left_context[:pos]))
         else:
-            word_prefix = context
+            word_prefix = left_context
+            # keep BOS context only (avoid re-encoding the same string twice)
+            # NOTE: for GPT-2/OPT this yields the right “no leading-space” behavior at BOS
             tokens.extend(self._encode(""))
 
-        base_len = len(tokens)  # used to slice newly generated suffix correctly
+        base_len = len(tokens)
 
-        # ---------------- Vocab decode cache ----------------
+        # Max letters we can still add before boundary (relative to the already-typed prefix)
+        max_hypo_len = compute_max_hypo_len(left_context=left_context,
+                                            max_word_len=max_word_len)
+
+        # ------------ Cache & special IDs ------------
+        # Token→single-piece decode cache (id -> text)
         if not hasattr(self, 'decoded_vocab') or len(self.decoded_vocab) != self.tokenizer.vocab_size:
             self.decoded_vocab = [
                 self.tokenizer.decode([tid], skip_special_tokens=True)
                 for tid in range(self.tokenizer.vocab_size)
             ]
-        special_ids = set(getattr(self.tokenizer, "all_special_ids", []) or [])
+        special_ids = getattr(self, "special_ids",
+                              set(getattr(self.tokenizer, "all_special_ids", []) or []))
+        eos_id = getattr(self.tokenizer, "eos_token_id", None)
+        # IDs at or above this value are *not* decodable into normal tokens
+        decodable_cutoff = int(self.tokenizer.vocab_size)
 
-        # ---------------- Allowed first-token set ----------------
+
+        # ------------ Allowed-first gating ------------
         prefix_cmp = word_prefix.lstrip().lower()
         at_bos = (pos < 0)
 
         if prefix_cmp == "":
-            # Empty prefix: at BOS we prefer no leading-space tokens; mid-sentence we prefer leading-space tokens
             if at_bos:
-                allowed_first = [
-                    tid for tid, s in enumerate(self.decoded_vocab)
-                    if tid not in special_ids and not s.startswith(" ")
-                ]
-                # fallback: allow everything if tokenizer doesn't separate this well
+                # Prefer tokens without a leading space at BOS
+                allowed_first = [tid for tid, s in enumerate(self.decoded_vocab)
+                                 if tid not in special_ids and not s.startswith(" ")]
                 if not allowed_first:
-                    allowed_first = [tid for tid in range(self.tokenizer.vocab_size) if tid not in special_ids]
+                    allowed_first = [tid for tid in range(self.tokenizer.vocab_size)
+                                     if tid not in special_ids]
             else:
-                allowed_first = [
-                    tid for tid, s in enumerate(self.decoded_vocab)
-                    if tid not in special_ids and s.startswith(" ")
-                ]
+                # Mid-sentence we prefer leading-space tokens
+                allowed_first = [tid for tid, s in enumerate(self.decoded_vocab)
+                                 if tid not in special_ids and s.startswith(" ")]
         else:
             allowed_first = []
             for tid, s in enumerate(self.decoded_vocab):
                 if tid in special_ids:
                     continue
                 clean = s.lstrip().lower()
+                # allow token if it starts with the typed prefix, or is a prefix of it
                 if clean.startswith(prefix_cmp) or prefix_cmp.startswith(clean):
                     allowed_first.append(tid)
 
@@ -523,79 +500,101 @@ class CausalLanguageModel(LanguageModel):
 
         allowed_first_tensor = torch.tensor(allowed_first, device=self.device, dtype=torch.long)
 
-        # ---------------- Boundary & canonicalization helpers ----------------
-        TRAIL_PUNCT_RE = re.compile(r'[\.!\?…,:;]+$')
-        CLOSERS_RE     = re.compile(r'[\)\]\}\"\'”’]+$')
-        ALNUM_RE       = re.compile(r"[A-Za-z0-9]")
+        # ------------ Safe decode for suffix ------------
+        def _decode_suffix_safe(ids: List[int]) -> str:
+            """Decode a variable-length suffix robustly (no None tokens)."""
+            if not ids:
+                return ""
+            # Keep only decodable, non-special IDs (prevents None tokens on OPT/GPT-2)
+            filt = [tid for tid in ids if tid not in special_ids and tid < decodable_cutoff]
+            if not filt:
+                return ""
+            try:
+                # Fast path
+                return self.tokenizer.decode(filt, skip_special_tokens=True)
+            except Exception:
+                # Fallback path
+                toks = self.tokenizer.convert_ids_to_tokens(filt, skip_special_tokens=False)
+                toks = [t for t in toks if isinstance(t, str)]
+                try:
+                    return self.tokenizer.convert_tokens_to_string(toks)
+                except Exception:
+                    return "".join(toks)
 
-        def canonicalize_word_from_suffix(raw_suffix: str) -> str:
+        # Utility: letters seen before hitting a boundary (and whether we hit one)
+        def _letters_until_boundary(s: str) -> tuple[int, bool, bool, int]:
             """
-            Given the raw decoded suffix (no tokens from the fixed left context),
-            return canonical word key:
-              - if a space is present, take up to the first space
-              - strip trailing punctuation and closers
-              - lowercase
-              - require at least one alnum
+            Returns:
+              letters_count, saw_alpha, hit_boundary, boundary_index
             """
-            t = raw_suffix
-            if ' ' in t:
-                t = t.split(' ')[0]
-            t = CLOSERS_RE.sub('', TRAIL_PUNCT_RE.sub('', t))
-            t = t.strip().lower()
-            return t if ALNUM_RE.search(t) else ""
+            letters = 0
+            saw_alpha = False
+            hit = False
+            idx = 0
+            while idx < len(s):
+                ch = s[idx]
+                if ch.isalpha():
+                    saw_alpha = True
+                    letters += 1
+                if ch in end_chars:
+                    hit = True
+                    break
+                idx += 1
+            return letters, saw_alpha, hit, idx
 
-        # ---------------- Beam search state ----------------
+        # ------------ Beam state ------------
         LOGP, SEQ = 0, 1
-        current_hypos = [(0.0, tokens)]   # (cumulative logp, token_id_sequence)
-        completed_words: dict[str, float] = {}  # word -> merged logp
+        current_hypos: list[tuple[float, list[int]]] = [(0.0, tokens)]
+        completed_logp: dict[str, float] = {}        # canonical(lower) -> merged logp
+        best_surface: dict[str, tuple[float, str]] = {}  # canonical(lower) -> (best_logp, best_surface_form)
         best_completed_logp = -float("inf")
-        cap_completed = max_completed
 
-        # ---------------- Decoding loop (capped by steps) ----------------
+        # ------------ Decoding loop ------------
         step = 0
-        with torch.inference_mode():
-            while current_hypos and step < max_new_tokens:
-                # Highest-first helps pruning decisions
-                current_hypos.sort(reverse=True)
+        max_search_steps = 12        # your original setting
+        topk_first = 1024            # your original setting
 
+        with torch.inference_mode():
+            while current_hypos and step < max_search_steps:
+                current_hypos.sort(reverse=True)  # highest first
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
 
                 all_top_vals = []
                 all_top_ids  = []
 
-                # ---- Batched forward pass over ragged sequences (pad + attention_mask) ----
-                for i in range(0, len(current_hypos), batch_size):
-                    batch_seqs  = seqs[i:i + batch_size]
-                    batch_logps = add_logps[i:i + batch_size]
+                # ---- Batched forward (pad + mask) ----
+                batch_size_to_use = len(current_hypos) if not self.batch_size else self.batch_size
+                for i in range(0, len(current_hypos), batch_size_to_use):
+                    batch_seqs  = seqs[i:i + batch_size_to_use]
+                    batch_logps = add_logps[i:i + batch_size_to_use]
 
                     pad_id = (getattr(self.tokenizer, "pad_token_id", None)
                               or getattr(self.tokenizer, "eos_token_id", None) or 0)
                     maxlen = max(len(s) for s in batch_seqs)
-                    input_ids  = [s + [pad_id] * (maxlen - len(s)) for s in batch_seqs]
-                    attn_mask  = [[1] * len(s) + [0] * (maxlen - len(s)) for s in batch_seqs]
+                    input_ids = [s + [pad_id] * (maxlen - len(s)) for s in batch_seqs]
+                    attn_mask = [[1] * len(s) + [0] * (maxlen - len(s)) for s in batch_seqs]
 
-                    input_ids_t  = torch.tensor(input_ids, dtype=torch.long, device=self.device)
-                    attn_mask_t  = torch.tensor(attn_mask, dtype=torch.long, device=self.device)
+                    input_ids_t = torch.tensor(input_ids, dtype=torch.long, device=self.device)
+                    attn_mask_t = torch.tensor(attn_mask, dtype=torch.long, device=self.device)
 
                     before = time.time_ns()
                     out    = self.model(input_ids=input_ids_t, attention_mask=attn_mask_t)
-                    logits = out.logits[:, -1, :].float()  # stability if model is fp16
+                    logits = out.logits[:, -1, :].float()
                     logp   = torch.log_softmax(logits, dim=-1)
                     add    = torch.tensor(batch_logps, dtype=logp.dtype, device=self.device).unsqueeze(1)
-                    scores = logp + add  # [B, V] cumulative
+                    scores = logp + add  # [B, V]
 
                     if step == 0:
-                        # Restrict BEFORE top-k to the allowed-first subset (prevents dropping correct token)
                         subset = scores.index_select(1, allowed_first_tensor)
                         K = min(subset.size(1), topk_first)
                         top_vals, top_idx = torch.topk(subset, k=K, dim=1, largest=True, sorted=True)
                         top_ids = allowed_first_tensor[top_idx]
                     else:
-                        top_vals, top_ids = torch.topk(scores, k=topk_next, dim=1, largest=True, sorted=True)
+                        K2 = min(beam_search_max, scores.size(1))
+                        top_vals, top_ids = torch.topk(scores, k=K2, dim=1, largest=True, sorted=True)
 
                     self.predict_inference_ns += time.time_ns() - before
-
                     all_top_vals.append(top_vals)
                     all_top_ids.append(top_ids)
 
@@ -614,146 +613,137 @@ class CausalLanguageModel(LanguageModel):
                     cand_logps = new_log_probs[row_idx].tolist()
 
                     for token_id, cum_logp in zip(cand_ids, cand_logps):
-                        if token_id in special_ids:
+                        # Skip specials or undecodable IDs immediately
+                        if token_id in special_ids or token_id >= decodable_cutoff:
+                            continue
+                        if token_id == eos_id:
+                            # treat EOS as a boundary; no surface char added
+                            raw_suffix = _decode_suffix_safe(cur_seq[base_len:])
+                            suffix_for_prefix = raw_suffix.lstrip()
+                            # The typed prefix must still align
+                            if not suffix_for_prefix.lower().startswith(prefix_cmp):
+                                continue
+                            # We've "completed" whatever was there before EOS, if it is meaningful
+                            letters, saw_alpha, hit, boundary_index = _letters_until_boundary(suffix_for_prefix)
+                            if saw_alpha:
+                                canonical_lower = suffix_for_prefix.lower()[:boundary_index]
+                                surface = suffix_for_prefix[:boundary_index]
+                                prev = completed_logp.get(canonical_lower)
+                                if prev is None:
+                                    completed_logp[canonical_lower] = cum_logp
+                                    best_surface[canonical_lower] = (cum_logp, surface)
+                                else:
+                                    m = max(prev, cum_logp)
+                                    completed_logp[canonical_lower] = m + math.log(math.exp(prev - m) +
+                                                                                   math.exp(cum_logp - m))
+                                    if cum_logp > best_surface[canonical_lower][0]:
+                                        best_surface[canonical_lower] = (cum_logp, surface)
+                                best_completed_logp = max(best_completed_logp, completed_logp[canonical_lower])
+                            # do not continue from EOS
                             continue
 
                         new_seq = cur_seq + [token_id]
 
-                        # Decode the *raw* suffix (do not strip leading space yet)
+                        # Decode just the new suffix (tokens after the fixed base)
                         suffix_tokens = new_seq[base_len:]
                         key = tuple(suffix_tokens)
                         if key in decode_cache:
                             raw_suffix = decode_cache[key]
                         else:
-                            raw_suffix = self.tokenizer.decode(suffix_tokens, skip_special_tokens=True)
+                            raw_suffix = _decode_suffix_safe(suffix_tokens)
                             decode_cache[key] = raw_suffix
 
-                        # For prefix alignment we lstrip, but for boundary detection we need the raw string
+                        # Align with typed prefix (case-insensitive, ignore leading space)
                         suffix_for_prefix = raw_suffix.lstrip()
-
-                        # Case-insensitive typed-prefix alignment
                         if not suffix_for_prefix.lower().startswith(prefix_cmp):
                             continue
-
-                        # Completion on boundary:
-                        #   - There is a space *anywhere* in the decoded suffix (means a word boundary)
-                        #   - Or suffix ends with terminal punctuation and/or closers
-                        completed_now = False
-                        if ' ' in suffix_for_prefix:
-                            # leading space was present -> boundary hit
-                            completed_now = True
-                        elif TRAIL_PUNCT_RE.search(suffix_for_prefix) or CLOSERS_RE.search(suffix_for_prefix):
-                            completed_now = True
-
-                        if completed_now:
-                            canonical = canonicalize_word_from_suffix(suffix_for_prefix)
-                            if not canonical:
-                                # No meaningful token after boundary
+                        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                        # Cheap early guard: if we've already generated too many characters
+                        # beyond the typed prefix, prune this candidate before boundary scan.
+                        if max_word_len is not None:
+                            generated_len = max(0, len(suffix_for_prefix) - len(prefix_cmp))
+                            if generated_len > max_word_len:
                                 continue
+                       # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-                            # Merge duplicates via stable logaddexp
-                            prev = completed_words.get(canonical)
+                        # Check boundary and length
+                        letters, saw_alpha, hit, boundary_index = _letters_until_boundary(suffix_for_prefix)
+
+                        if hit and saw_alpha:
+                            # Completed word up to the first end char
+                            surface = suffix_for_prefix[:boundary_index]
+                            canonical_lower = surface.lower()
+
+                            prev = completed_logp.get(canonical_lower)
                             if prev is None:
-                                completed_words[canonical] = cum_logp
+                                completed_logp[canonical_lower] = cum_logp
+                                best_surface[canonical_lower] = (cum_logp, surface)
                             else:
                                 m = max(prev, cum_logp)
-                                completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
+                                completed_logp[canonical_lower] = m + math.log(math.exp(prev - m) +
+                                                                               math.exp(cum_logp - m))
+                                if cum_logp > best_surface[canonical_lower][0]:
+                                    best_surface[canonical_lower] = (cum_logp, surface)
 
-                            if completed_words[canonical] > best_completed_logp:
-                                best_completed_logp = completed_words[canonical]
+                            if completed_logp[canonical_lower] > best_completed_logp:
+                                best_completed_logp = completed_logp[canonical_lower]
 
-                            # Stop when we have enough DISTINCT words
-                            if cap_completed and len(completed_words) >= cap_completed:
-                                current_hypos = []
+                            if max_word_hypotheses and len(completed_logp) >= max_word_hypotheses:
+                                current_hypos = []  # stop everything
                                 break
                         else:
-                            # Continue the word; prune if far below best completed
-                            if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - prune_margin:
+                            # Not completed yet. Enforce beam / best-completed pruning.
+                            if (best_completed_logp > -float("inf")
+                                    and cum_logp < best_completed_logp - beam_logp_best):
+                                continue
+                            # Enforce max_word_len relative to typed prefix
+                            if letters > max_hypo_len:
                                 continue
 
-                            # Beam maintenance
-                            if not self.beam_width or len(next_hypos) < self.beam_width:
+                            # Beam maintenance (use beam_search_max, same as other models)
+                            if len(next_hypos) < beam_search_max:
                                 heapq.heappush(next_hypos, (cum_logp, new_seq))
                             elif cum_logp > next_hypos[0][LOGP]:
                                 heapq.heappushpop(next_hypos, (cum_logp, new_seq))
 
                     if not current_hypos:
-                        break  # cap reached this step
+                        break  # max_word_hypotheses was hit
 
                 if not next_hypos:
-                    break  # no further expansions
+                    break
 
                 current_hypos = next_hypos
                 step += 1
 
-        # ---------------- Ranking & return ----------------
-        ranked = sorted(completed_words.items(), key=lambda kv: kv[1], reverse=True)
-        results = [w for (w, _) in ranked[:nbest]]
+        # ------------ Rank & format return ------------
+        ranked = sorted(completed_logp.items(), key=lambda kv: kv[1], reverse=True)[:nbest]
 
-        self.predict_total_ns += time.time_ns() - start_ns
-        return results
-
-
-
+        # The evaluator expects only the suffix beyond the typed prefix.
+        if self.predict_lower:
+            # return lowercase suffixes
+            results = [key[len(word_prefix):] for (key, _) in ranked]
+            if return_log_probs:
+                return [(key[len(word_prefix):], lp) for (key, lp) in ranked]
+            else:
+                self.predict_total_ns += time.time_ns() - start_ns
+                return results
+        else:
+            # preserve best surface casing for each canonical key
+            surfaced = []
+            for key, lp in ranked:
+                best_surf = best_surface[key][1]
+                surfaced.append((best_surf[len(word_prefix):], lp))
+            if return_log_probs:
+                self.predict_total_ns += time.time_ns() - start_ns
+                return surfaced
+            else:
+                self.predict_total_ns += time.time_ns() - start_ns
+                return [s for (s, _) in surfaced]
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""
         if self.predict_total_ns > 0:
             print(f"Predict %: "
                   f"inference {self.predict_inference_ns / self.predict_total_ns * 100.0:.3f}")
-
-    def update(self) -> None:
-        """Update the model state"""
-        ...
-
-    def load(self) -> None:
-        """
-            Load the language model and tokenizer, initialize class variables
-        """
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
-        except BaseException:
-            raise InvalidLanguageModelException(f"{self.model_name} is not a valid model identifier on HuggingFace.")
-        self.vocab_size = self.tokenizer.vocab_size
-        try:
-            if self.lora:
-                self.model = AutoPeftModelForCausalLM.from_pretrained(self.lora_path)
-            else:
-                self.model = AutoModelForCausalLM.from_pretrained(self.model_dir)
-            if self.fp16 and self.device == "cuda":
-                self.model = self.model.half()
-        except:
-            raise InvalidLanguageModelException(f"{self.model_dir} is not a valid local folder or model identifier on HuggingFace.")
-        # Fix mismatch between tokenizer vocab size and model vocab size (common in OPT models)
-        tokenizer_vocab_size = self.tokenizer.vocab_size
-        model_vocab_size = self.model.config.vocab_size
-
-#        if self.lora:
-#            try:
-#                config = PeftConfig.from_pretrained(self.lora_path)
-#                peft_model = PeftModel.from_pretrained(self.model, config)
-#                peft_model.set_adapter("lora")
-#                self.model = peft_model
-                #                self.model = peft_model.merge_and_unload()
-#                self.model.load_adapter(self.lora_path)
-#                self.model.enable_adapters()
-#            except:
-#                raise InvalidLanguageModelException(f"Failed to load LoRA adapter. Ensure {self.lora_path} is a valid LoRA adapter.")
-
-        self.model.eval()
-
-        self.model.to(self.device)
-
-        self.symbol_set_lower = []
-
-        for ch in self.symbol_set:
-            if ch is SPACE_CHAR:
-                self.symbol_set_lower.append(SPACE_CHAR)
-            elif ch is BACKSPACE_CHAR:
-                continue
-            else:
-                self.symbol_set_lower.append(ch.lower())
-
-        self._build_vocab()
 
     def get_num_parameters(self) -> int:
         """
@@ -763,18 +753,3 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """
-            Wrapper method that takes in evidence text, and output probability distribution
-            of next character
-        Args:
-            evidence - a list of characters (typed by the user)
-        Response:
-            A list of symbol with probability
-        """
-        next_char_pred = self.predict(evidence)
-
-        return next_char_pred
-
-

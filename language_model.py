@@ -1,28 +1,30 @@
 """Defines the language model base class."""
+
+# --- Legacy compatibility constants used by ngram/lm_eval ---
+SPACE_CHAR = " "      # used by older evaluation code to represent a space
+BACKSPACE_CHAR = "<bs>"  # placeholder; not used in your new code paths
+
+def alphabet():
+    # Uppercase A-Z + apostrophe + space (legacy default for lm_eval)
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZ' "
 from abc import ABC, abstractmethod
 from typing import List, Tuple
-from string import ascii_uppercase
 
-# Eventually these should go away, but for now leaving to test existing code
-SPACE_CHAR = '_'
-BACKSPACE_CHAR = '<'
-
-
-# Eventually replace
-def alphabet():
-    """Alphabet.
-
-    Function used to standardize the symbols we use as alphabet.
-
-    Returns
-    -------
-        array of letters.
-    """
-    return list(ascii_uppercase) + [BACKSPACE_CHAR, SPACE_CHAR]
-
+def compute_max_hypo_len(left_context: str,
+                         max_word_len: int,
+                        ) -> int:
+    """Compute the maximum number of *new* letters we can add given an already-typed prefix."""
+    prefix_len = 0
+    if left_context:
+        pos = len(left_context) - 1
+        while pos >= 0 and left_context[pos] != " ":
+            prefix_len += 1
+            pos -= 1
+            
+    return max(0, max_word_len - prefix_len)
 
 class LanguageModel(ABC):
-    """Parent class for Language Models."""
+    """Parent class for language model classes"""
 
     symbol_set: List[str] = None
 
@@ -51,18 +53,26 @@ class LanguageModel(ABC):
         ...
 
     @abstractmethod
-    def update(self) -> None:
-        """Update the model state"""
+    def predict_words(self,
+                      left_context: str,
+                      word_end_symbols: List[str] = None,
+                      nbest: int = None,
+                      beam_logp_best: float = None,
+                      beam_search_max: int = None,
+                      max_word_len: int = None,
+                      max_word_hypotheses: int = None,
+                      return_log_probs=False) -> List:
+        """
+        Given some left text context, predict the most likely next words.
+        Left and right context use normal space character for any spaces, we convert internally to <sp>
+        :param left_context: previous text we are conditioning on, note this includes the prefix of the current word
+        :param word_end_symbols: tuple of symbols that we consider to end a word, defaults to just the space character
+        :param nbest: number of most likely words to return
+        :param beam_logp_best: log-prob beam used during the search, hypothesis with log prob > than this distance from best hypothesis are pruned
+        :param beam_search_max: maximum number of hypotheses to track during each extension of search
+        :param max_word_len: maximum length of words that can be predicted
+        :param max_word_hypotheses: stop search if we reach this many complete word prediction hypotheses
+        :param return_log_probs: whether to return log probs of each word
+        :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
+        """
         ...
-
-    @abstractmethod
-    def load(self) -> None:
-        """Restore model state from the provided checkpoint"""
-        ...
-
-    def reset(self) -> None:
-        """Reset language model state"""
-        ...
-
-    def state_update(self, evidence: List[str]) -> List[Tuple]:
-        """Update state by predicting and updating"""

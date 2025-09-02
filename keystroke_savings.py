@@ -4,152 +4,109 @@
 #  1) n-gram character, via KenLM library
 #  2) ByGPT5 byte tokenized LLM, via Hugging Face plus uniformers library
 
-from ngram import NGramLanguageModel
-from causal_byte import CausalByteLanguageModel
 from timeit import default_timer as timer
-import argparse
+from argparse import ArgumentParser
 from datetime import datetime
 from socket import gethostname
-import re
-import sys
-from causal import CausalLanguageModel
+from sys import exit, stderr, stdout
+from fcntl import flock, LOCK_UN, LOCK_EX
+from os import path
+import eval_helper
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--phrases", type=str, required=True, help="Input text file with phrases")
-    parser.add_argument("--phrase-limit", type=int, help="Max phrases to evaluate")
-    parser.add_argument("--lm", type=str, help="Filename of n-gram model to load")
-    parser.add_argument("--lower", action="store_true", help="Lowercase the phrases")
-    parser.add_argument("--strip", action="store_true", help="Strip symbols except apostrophe")
-    parser.add_argument("--nbest", type=int, help="N-best list size", default=3)
-    parser.add_argument("--beam", type=float, help="Beam for search, log-prob", default=3.0)
-    parser.add_argument("--symbols", type=str, default="abcdefghijklmnopqrstuvwxyz' ", help="Valid symbols")
-    parser.add_argument("--model-name", help="Model name of LLM")
-    parser.add_argument("--model-dir", help="Local directory to load fine-tuned LLM")
-    parser.add_argument("--byte", action="store_true", help="LLM uses byte tokenization")
-    parser.add_argument("--causal", action="store_true", help="LLM uses causal tokenization")
-    parser.add_argument("--fp16", action="store_true", help="Convert LLM to fp16 (CUDA only)")
-    parser.add_argument("--case-simple", action="store_true", default=False, help="Simple automatic casing of left context")
-    parser.add_argument("--use-mps", action="store_true", help="Use MPS Apple Silicon GPU during inference")
-    parser.add_argument("--use-cuda", action="store_true", help="Use CUDA GPU during inference")
-    parser.add_argument("--max-len", type=int, help="Truncate phrases longer than this many characters")
-    parser.add_argument("--left-context", default="", help="left language model context for causal model")
-    parser.add_argument("--mixed-case-context", action="store_true", default=False,
-                        help="use mixed case left context")
+    parser = ArgumentParser()
+    eval_helper.add_args(parser)
+    parser.add_argument("--nbest", type=int, help="Number of word predictions made by simulated interface", default=3)
+    parser.add_argument("--beam", type=float, help="For pruning word prediction search, log prob difference versus best completed hypothesis")
+    parser.add_argument("--beam-max", type=int, help="For pruning word prediction search, max number of hypotheses to track per extension of search")
+    parser.add_argument("--word-end", type=str, help="Additional symbols that can end a word", action="append", dest="word_end_symbols")
+    parser.add_argument("--trailing-space", action="store_true", help="Assume user has to write a trailing space (VelociTap compatability)")
+    parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
+    parser.add_argument("--max-word-len", type=int, help="Max length of words to predict")
+    parser.add_argument("--max-word-hypotheses", type=int, help="Stop search when we hit this many word hypotheses")
     args = parser.parse_args()
 
-    if not args.lm and not args.model_name:
-        print(f"ERROR: Must specify either --lm  or --model_name")
-        sys.exit(1)
+    # Check for a variety of invalid command line switch combinations
+    if sum([args.ngram, args.causal, args.byte]) != 1:
+        print(f"ERROR: Exactly one of --ngram, --causal, --byte must be specified!", file = stderr)
+        exit(1)
+    if (args.causal or args.byte) and not args.model_name:
+        print(f"ERROR: Transformer model must be specified with --model-name!", file = stderr)
+        exit(1)
+    eval_helper.check_args_for_errors(args)
+    eval_helper.check_args_for_warnings(args)
 
-    # Handy stuff to print out in our log files
-    print(f"START: {datetime.now()}")
-    print(f"ARGS: {args}")
-    print(f"HOSTNAME: {gethostname()}")
+    eval_helper.print_startup_info(args)
+    eval_helper.set_cpu_cores(args)
+    device = eval_helper.get_device(args)
+    phrases, unstripped_context = eval_helper.load_phrases(args)
 
-    # Read in the input file with sentences
-    phrase_file = open(args.phrases, "r")
-    phrases = phrase_file.readlines()
-    phrase_file.close()
-    # We may want to limit to only the first so many phrases
-    if args.phrase_limit:
-        phrases = phrases[:args.phrase_limit]
-    print(f"Number phrases loaded: {len(phrases)}")
+    eval_helper.prep_left_context(args)
+    print(f"Prediction left context: '{args.left_context}'")
+    stdout.flush()
+
+    symbol_set = list(args.symbols)
+    print(f"Symbols, size {len(symbol_set)}: {symbol_set}")
+    print(f"Word end symbols: {args.word_end_symbols}")
+    eval_helper.sanity_check_symbols(symbol_set = symbol_set,
+                                     phrases = phrases,
+                                     predict_lower= args.predict_lower)
 
     start = timer()
-    symbols = list(args.symbols)
-    print(f"Symbols, size {len(symbols)}: {symbols}")
-
-    lm = None
-    device = "cpu"
-    if args.use_mps:
-        device = "mps"
-    elif args.use_cuda:
-        device = "cuda"
-
-    if args.lm:
-        print(f"Loading n-gram LM: {args.lm}")
-        lm = NGramLanguageModel(symbols, args.lm, False)
-    elif args.byte:
-        if args.model_dir:
-            print(f"Loading byte LLM: {args.model_name} from {args.model_dir}")
-        else:
-            print(f"Loading byte LLM: {args.model_name}")
-        lm = CausalByteLanguageModel(symbol_set=symbols,
-                                     lang_model_name=args.model_name,
-                                     lm_device=device,
-                                     lm_path=args.model_dir,
-                                     lm_left_context="",
-                                     fp16=args.fp16,
-                                     mixed_case_context=False,
-                                     case_simple=args.case_simple,
-                                     normal_space=True)
-    elif args.causal:
-        print()
-        lm = CausalLanguageModel(symbol_set=symbols,
-                                 lang_model_name=args.model_name,
-                                 lm_device=device,
-                                 lm_path=args.model_dir,
-                                 lm_left_context=args.left_context,
-                                 beam_width=args.beam,
-                                 fp16=args.fp16,
-                                 mixed_case_context=args.mixed_case_context,
-                                 case_simple=args.case_simple,
-                                 max_completed=32000)
-        print(lm.model_name)
-
-    print(f"Model load time = {timer() - start:.2f}")
+    lm = eval_helper.load_language_model(args=args,
+                                         symbol_set=symbol_set,
+                                         device=device)
 
     total_chars = 0
     total_keystrokes = 0
     total_truncated = 0
-    skipped_empty = 0
+
+    previous_context = ""
+    last_phrase_final_context = ""
 
     # Iterate over all the phrases
     total_predictions = 0
     prediction_start = timer()
-    for i, phrase in enumerate(phrases):
+    for phrase_index, phrase in enumerate(phrases):
         phrase_start = timer()
-        phrase = phrase.strip()
-        if args.lower:
+
+        phrase_len = len(phrase)
+        if args.trailing_space:
+            phrase_len += 1
+
+        total_chars += phrase_len
+
+        # In the case of simple automatic casing, we want to start with lowercase text
+        # and then try and recover case in the left context as it is generated
+        if args.case_simple:
             phrase = phrase.lower()
-        if args.strip:
-            phrase = re.sub(r'[^a-zA-Z \']', '', phrase)
-        # Skip completely empty phrases after cleaning
-        if len(phrase) == 0:
-            print(f"*** Phrase {i}: <EMPTY AFTER CLEANING>, len: 0 — skipping")
-            skipped_empty += 1
-            continue
 
-        # Optionally we truncated phrases that are too long
-        # This can avoid OOM for the LLM doing things in batches
-        truncated = ""
-        if args.max_len and len(phrase) > args.max_len:
-            # First cut it off
-            phrase = phrase[:args.max_len]
-            # Then remove characters until we reach a space
-            while phrase[-1] != " ":
-                phrase = phrase[:-1]
-            phrase = phrase.strip()
-            total_truncated += 1
-            truncated = ", TRUNCATED"
-
-        total_chars += len(phrase)
-
-        print(f"*** Phrase {i}: {phrase}, len: {len(phrase)}{truncated}")
-        j = 0
+        print(f"*** Phrase {phrase_index + 1}: {phrase}")
+        token_index = 0
         phrase_keystrokes = 0
         phrase_predictions = 0
+
+        # We may want to maintain left context that makes use of previous phrases
+        if args.previous_max_len:
+            previous_context = eval_helper.update_context(context=previous_context + last_phrase_final_context,
+                                                          max_len=args.previous_max_len,
+                                                          previous_add=args.previous_add)
+        else:
+            # Reset the context on every phrase
+            previous_context = ""
+
+        word_prefix = ""
+        context_to_use = ""
+
         # Iterate over all character positions in the phrase
-        while j < len(phrase):
-            left_context = phrase[0:j]
+        while token_index < len(phrase):
             # Figure out the target word
             # If the next letter is space, then our target is the current word
-            if j> 0 and phrase[j] == " ":
-                k = j - 1
+            if token_index > 0 and phrase[token_index] == " ":
+                k = token_index - 1
             else:
-                k = j
+                k = token_index
             # Back up until we hit space or start of string
             while k > 0 and phrase[k] != " ":
                 k -= 1
@@ -160,44 +117,155 @@ if __name__ == "__main__":
             while k < len(phrase) and phrase[k] != " ":
                 target_word += phrase[k]
                 k += 1
-            words = lm.predict_words(left_context, nbest=args.nbest, beam=args.beam)
+
+            # We may have mixed case phrases and want to match a lowercase predicted word
+            if args.predict_lower:
+                target_word = target_word.lower()
+
+            # See if we should use a literal slot for this prediction (not used at start of words)
+            #use_literal = args.literal_slot and token_index > 0 and phrase[token_index] != " "
+            use_literal = args.literal_slot and len(word_prefix) > 0
+
+            # Use either the actual prefix of this sentence, or the context before symbols stripping
+            if args.unstripped_context:
+                context = unstripped_context[phrase_index][token_index]
+            else:
+                context = phrase[0:token_index]
+
+            extra = ""
+            context_to_use = context
+            # Optionally automatically try and fix case in lowercase phrases
+            if args.case_simple:
+                context_to_use = eval_helper.case_simple(context)
+                extra = f", case simple '{context_to_use}'"
+            if args.previous_max_len:
+                extra += f", previous_context '{previous_context}'"
+            print(f"prefix '{word_prefix}', context '{context}'{extra}")
+
+            words = lm.predict_words(left_context=previous_context + context_to_use,
+                                     nbest=args.nbest,
+                                     beam_logp_best=args.beam,
+                                     beam_search_max=args.beam_max,
+                                     word_end_symbols=args.word_end_symbols,
+                                     max_word_len=args.max_word_len,
+                                     max_word_hypotheses=args.max_word_hypotheses,
+                                     )
+
+            # predict_words only returns the text that completes the current left_context
+            # We need to add back in the prefix of the word thus far
+            if args.predict_lower:
+                words = [word_prefix.lower() + word for word in words]
+            else:
+                words = [word_prefix + word for word in words]
+
+            # Add the literal text type as the final slot
+            # But not if it already appears in the n-best results
+            # If the n-best result is at maximum size, remove the least probable to make space for literal slot
+            if use_literal:
+                space_pos = context.rfind(" ")
+                if space_pos != -1:
+                    literal = context[space_pos + 1:]
+                else:
+                    literal = context
+                if literal not in words:
+                    if len(words) == args.nbest:
+                        words[-1] = literal
+
             total_predictions += 1
             phrase_predictions += 1
             print_words = ""
-            for word in words:
+            for k, word in enumerate(words):
                 if word == target_word:
-                    print_words += f" {word.upper()}"
+                    print_words += f"{k}:*{word}*, "
                 else:
-                    print_words += f" {word}"
-            print(f" predictions:{print_words}, left '{left_context}', target '{target_word}', keys {phrase_keystrokes}")
+                    print_words += f"{k}:{word}, "
+            print(f" predictions {print_words}target '{target_word}', keys {phrase_keystrokes}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
                 print(f" SELECTED: {target_word}")
                 # Advance to space or end of phrase
-                while j < len(phrase) and phrase[j] != " ":
-                    j += 1
+                while token_index < len(phrase) and phrase[token_index] != " ":
+                    context += phrase[token_index]
+                    token_index += 1
+                word_prefix = ""
             else:
-                print(f" TYPED: '{phrase[j]}'")
+                if phrase[token_index] == " ":
+                    word_prefix = ""
+                else:
+                    word_prefix += phrase[token_index]
 
-            j += 1
+                print(f" TYPED: '{phrase[token_index]}'")
+
+            stdout.flush()
+            token_index += 1
 
             total_keystrokes += 1
             phrase_keystrokes += 1
-        # Safe even if something slipped through with zero-length (shouldn't, due to the skip above)
-        ks = ((len(phrase) - phrase_keystrokes) / len(phrase) * 100.0) if len(phrase) > 0 else 0.0
-        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {len(phrase)} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+
+        # Update the context based on either the entire phrase or its unstripped content
+        if args.unstripped_context:
+            last_phrase_final_context = unstripped_context[phrase_index][-1]
+        else:
+            last_phrase_final_context = phrase
+
+        ks = (phrase_len - phrase_keystrokes) / phrase_len * 100.0
+        print(f"KS: {ks:.2f} keys {phrase_keystrokes} len {phrase_len} secs/pred {(timer() - phrase_start) / phrase_predictions:.2f}")
+        stdout.flush()
 
     print()
-    final_ks = ((total_chars - total_keystrokes) / total_chars * 100.0) if total_chars > 0 else 0.0
+    final_ks = (total_chars - total_keystrokes) / total_chars * 100.0
+    total_time = timer() - start
+    secs_per_pred = (timer() - prediction_start) / total_predictions
+
     print(f"TRUNCATED: {total_truncated}")
-    print(f"TIME: {timer() - start:.2f}")
-    total_pred_time = (timer() - prediction_start)
-    if total_predictions > 0:
-        print(f"SECS/PRED: {total_pred_time/total_predictions:.4f}")
-    else:
-        print("SECS/PRED: n/a (no predictions)")
-        
+    print(f"CHARS, KEYSTROKES, PHRASES: {total_chars} {total_keystrokes} {len(phrases)}")
+    print(f"TIME: {total_time:.2f}")
+    print(f"SECS/PRED: {secs_per_pred:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
-    if skipped_empty:
-        print(f"SKIPPED EMPTY PHRASES: {skipped_empty}")
+
+    # Optional output of a tab-delimited file for easy tracking of results over multiple experiments
+    if args.out_stats:
+        if not path.exists(args.out_stats):
+            # New file, write a header line
+            file = open(args.out_stats, "w")
+            # We may run this script in parallel so try and prevent writing to the stats file at the same time
+            flock(file, LOCK_EX)
+            file.write(f"final_ks"
+                       f"\tphrases"
+                       f"\ttotal_words"
+                       f"\ttotal_chars"
+                       f"\ttotal_keystrokes"
+                       f"\ttotal_time"
+                       f"\tsecs_per_pred"                       
+                       f"\tdate_time"
+                       f"\thostname"
+                       )
+            # Write any of the optional column names the client intends to log
+            if args.out_extra_cols:
+                for extra in args.out_extra_cols:
+                    extra_col_name = extra.split(",")[0]
+                    file.write(f"\t{extra_col_name}")
+            file.write("\n")
+        else:
+            file = open(args.out_stats, "a")
+            flock(file, LOCK_EX)
+
+        file.write(f"{final_ks:.6f}"
+                   f"\t{len(phrases)}"
+                   f"\t{eval_helper.count_words(phrases)}"
+                   f"\t{total_chars}"
+                   f"\t{total_keystrokes}"
+                   f"\t{timer() - start:.2f}"
+                   f"\t{secs_per_pred:.6f}"                   
+                   f"\t{datetime.now()}"
+                   f"\t{gethostname()}"
+                   )
+        # Write any of the optional column values
+        if args.out_extra_cols:
+            for extra in args.out_extra_cols:
+                extra_col_val = extra.split(",")[1]
+                file.write(f"\t{extra_col_val}")
+        file.write("\n")
+        flock(file, LOCK_UN)
+        file.close()
