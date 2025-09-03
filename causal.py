@@ -775,3 +775,13 @@ class CausalLanguageModel(LanguageModel):
             Integer number of parameters in the transformer model
         """
         return sum(p.numel() for p in self.model.parameters())
+
+    def get_tokenization(self, text: str) -> List[Tuple]:
+        """
+        Given a text string, return a list of (subword text, token ID) pairs.
+        """
+        result = []
+        token_ids = self._encode(text)
+        for i in range(len(token_ids)):
+            result.append((self.index_to_word[token_ids[i]], token_ids[i]))
+        return result
