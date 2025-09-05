@@ -202,7 +202,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         # Currently we only support conversion of the multi-byte sequence for curly apostrophe to normal apostrophe
         # But only do this if normal apostrophe is in the symbol set
-        if "'" in self.symbol_set and False:
+        if "'" in self.symbol_set:
             apostrophe_symbol_ids = self._encode("’")
             search_symbols = [""] * len(apostrophe_symbol_ids)
         else:
