@@ -199,7 +199,16 @@ class CausalByteLanguageModel(LanguageModel):
 
         # Create a symbol set that also includes any end of word symbols that aren't in our normal symbol set
         # If any of the end symbols occur in the normal symbol set, we include at end of list
-        search_symbols = []
+
+        # Currently we only support conversion of the multi-byte sequence for curly apostrophe to normal apostrophe
+        # But only do this if normal apostrophe is in the symbol set
+        if "'" in self.symbol_set and False:
+            apostrophe_symbol_ids = self._encode("’")
+            search_symbols = [""] * len(apostrophe_symbol_ids)
+        else:
+            apostrophe_symbol_ids = None
+            search_symbols = []
+
         for symbol in self.symbol_set:
             if symbol not in word_end_symbols:
                 # We'll add both an upper and lowercase version of this symbol
@@ -214,7 +223,14 @@ class CausalByteLanguageModel(LanguageModel):
             search_symbols.append(end_symbol)
 
         # Create a parallel list of the token IDs for our search symbols
-        search_symbol_ids = [self._encode(symbol) for symbol in search_symbols]
+        # Start with the curly apostrophe sequence if we are converting that
+        if apostrophe_symbol_ids:
+            search_symbol_ids = apostrophe_symbol_ids.copy()
+        else:
+            search_symbol_ids = []
+        # After that the IDs of all the normal symbols
+        for symbol in search_symbols:
+            search_symbol_ids.extend(self._encode(symbol))
 
         tokens = []
         tokens.extend(self.left_context_tokens)
@@ -304,7 +320,6 @@ class CausalByteLanguageModel(LanguageModel):
                                     word = hypo[STR].lower()
                                 else:
                                     word = hypo[STR]
-
                                 if word in finished_hypos:
                                     # If already had this word finish with a different end symbol we sum the probabilities
                                     finished_hypos[word] = np.logaddexp(finished_hypos[word], new_log_prob)
@@ -325,7 +340,15 @@ class CausalByteLanguageModel(LanguageModel):
                             elif len(hypo[STR]) < max_hypo_len:
                                 # This hypothesis is within the beam of the best to date
                                 # Extend by the text and token ID
-                                new_hypo = (new_log_prob, hypo[STR] + search_symbols[search_index], hypo[TOKENS] + token_index)
+                                new_tokens = hypo[TOKENS] + [token_index]
+                                # Check if we just extended by a complete curly apostrophe sequence
+                                if (apostrophe_symbol_ids and
+                                        len(new_tokens) >= len(apostrophe_symbol_ids) and
+                                        new_tokens[-len(apostrophe_symbol_ids):] == apostrophe_symbol_ids):
+                                        new_hypo = (new_log_prob, hypo[STR] + "'", new_tokens)
+                                        print(f"DEBUG, detected curly apostrophe: new_hypo {new_hypo}")
+                                else:
+                                        new_hypo = (new_log_prob, hypo[STR] + search_symbols[search_index], new_tokens)
                                 if len(next_hypos) < beam_search_max:
                                     # Add if we haven't reached our beam width limit so add
                                     heapq.heappush(next_hypos, new_hypo)

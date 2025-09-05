@@ -25,6 +25,8 @@ if __name__ == "__main__":
     parser.add_argument("--literal-slot", action="store_true", help="Use one slot for literal letters typed (except at start of word)")
     parser.add_argument("--max-word-len", type=int, help="Max length of words to predict")
     parser.add_argument("--max-word-hypotheses", type=int, help="Stop search when we hit this many word hypotheses")
+    parser.add_argument("--show-log-probs", action="store_true", help="Display log probs of predicted words")
+    parser.add_argument("--no-times", action="store_true", help="Omit times from output")
     args = parser.parse_args()
 
     # Check for a variety of invalid command line switch combinations
@@ -140,23 +142,27 @@ if __name__ == "__main__":
                 extra = f", case simple '{context_to_use}'"
             if args.previous_max_len:
                 extra += f", previous_context '{previous_context}'"
-            print(f"prefix '{word_prefix}', context '{context}'{extra}")
+            print(f"prefix '{word_prefix}', context '{context}'{extra}, target '{target_word}'")
 
-            words = lm.predict_words(left_context=previous_context + context_to_use,
+            # Get list of (word, logp) tuples for the predictions
+            prediction_start = timer()
+            predictions = lm.predict_words(left_context=previous_context + context_to_use,
                                      nbest=args.nbest,
                                      beam_logp_best=args.beam,
                                      beam_search_max=args.beam_max,
                                      word_end_symbols=args.word_end_symbols,
                                      max_word_len=args.max_word_len,
                                      max_word_hypotheses=args.max_word_hypotheses,
+                                     return_log_probs=True,
                                      )
+            prediction_time = timer() - prediction_start
 
             # predict_words only returns the text that completes the current left_context
             # We need to add back in the prefix of the word thus far
             if args.predict_lower:
-                words = [word_prefix.lower() + word for word in words]
+                words = [word_prefix.lower() + item[0] for item in predictions]
             else:
-                words = [word_prefix + word for word in words]
+                words = [word_prefix + item[0] for item in predictions]
 
             # Add the literal text type as the final slot
             # But not if it already appears in the n-best results
@@ -175,11 +181,20 @@ if __name__ == "__main__":
             phrase_predictions += 1
             print_words = ""
             for k, word in enumerate(words):
-                if word == target_word:
-                    print_words += f"{k}:*{word}*, "
+                if args.show_log_probs:
+                    extra = f" ({predictions[k][1]:.3f})"
                 else:
-                    print_words += f"{k}:{word}, "
-            print(f" predictions {print_words}target '{target_word}', keys {phrase_keystrokes}")
+                    extra = ""
+                if len(print_words) > 0:
+                    print_words += ", "
+                if word == target_word:
+                    print_words += f"{k}:*{word}*{extra}"
+                else:
+                    print_words += f"{k}:{word}{extra}"
+            if args.no_times:
+                print(f" predictions {print_words}")
+            else:
+                print(f" predictions {print_words}, time {prediction_time:.3f}")
 
             # See if we can get our target word via a prediction slot
             if target_word in words:
@@ -220,8 +235,9 @@ if __name__ == "__main__":
 
     print(f"TRUNCATED: {total_truncated}")
     print(f"CHARS, KEYSTROKES, PHRASES: {total_chars} {total_keystrokes} {len(phrases)}")
-    print(f"TIME: {total_time:.2f}")
-    print(f"SECS/PRED: {secs_per_pred:.4f}")
+    if not args.no_times:
+        print(f"TIME: {total_time:.2f}")
+        print(f"SECS/PRED: {secs_per_pred:.4f}")
     print(f"FINAL KS: {final_ks:.4f}")
 
     # Optional output of a tab-delimited file for easy tracking of results over multiple experiments
