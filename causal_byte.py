@@ -346,7 +346,6 @@ class CausalByteLanguageModel(LanguageModel):
                                         len(new_tokens) >= len(apostrophe_symbol_ids) and
                                         new_tokens[-len(apostrophe_symbol_ids):] == apostrophe_symbol_ids):
                                         new_hypo = (new_log_prob, hypo[STR] + "'", new_tokens)
-                                        print(f"DEBUG, detected curly apostrophe: new_hypo {new_hypo}")
                                 else:
                                         new_hypo = (new_log_prob, hypo[STR] + search_symbols[search_index], new_tokens)
                                 if len(next_hypos) < beam_search_max:
