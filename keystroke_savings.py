@@ -145,7 +145,7 @@ if __name__ == "__main__":
             print(f"prefix '{word_prefix}', context '{context}'{extra}, target '{target_word}'")
 
             # Get list of (word, logp) tuples for the predictions
-            prediction_start = timer()
+            predict_word_start = timer()
             predictions = lm.predict_words(left_context=previous_context + context_to_use,
                                      nbest=args.nbest,
                                      beam_logp_best=args.beam,
@@ -155,7 +155,7 @@ if __name__ == "__main__":
                                      max_word_hypotheses=args.max_word_hypotheses,
                                      return_log_probs=True,
                                      )
-            prediction_time = timer() - prediction_start
+            prediction_time = timer() - predict_word_start
 
             # predict_words only returns the text that completes the current left_context
             # We need to add back in the prefix of the word thus far
