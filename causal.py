@@ -463,8 +463,7 @@ class CausalLanguageModel(LanguageModel):
         # Tracks log probs of completed hypotheses. Due to casing and tokenizations we might get dupes
         word_to_log_probs = defaultdict(list)
 
-        # How many hypotheses have we finished?
-        completed = 0
+        # What is the best hypothesis so far?
         best_logp = None
 
         # Used to signal to while loop to stop the search
@@ -507,8 +506,11 @@ class CausalLanguageModel(LanguageModel):
             for current_index, current in enumerate(current_hypos):
                 # Create a list of token indexes that are a prefix of the target text.
                 vocab = set()
-                # Extending this hypothesis must match the remaining input groups
-                remaining_context = left_context[pos+current[LEN]:]
+                # Extending this hypothesis must match the remaining input
+                if pos < 0:
+                    remaining_context = left_context[current[LEN]:]
+                else:
+                    remaining_context = left_context[pos+current[LEN]:]
                 if len(remaining_context) == 0:
                     # There is no remaining context thus all subword tokens that are valid under our symbol set
                     # should be considered when computing the probability of the next character.
