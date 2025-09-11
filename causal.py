@@ -441,8 +441,6 @@ class CausalLanguageModel(LanguageModel):
         for ch in word_end_symbols:
             word_end_tokens.add(self._encode(ch)[0])
 
-        print(f'Word end tokens: {word_end_tokens}')
-
         # Constant indexes for use with the hypotheses tuples
         LOGP: Final[int] = 0
         SEQ: Final[int] = 1
@@ -467,6 +465,7 @@ class CausalLanguageModel(LanguageModel):
 
         # How many hypotheses have we finished?
         completed = 0
+        best_logp = None
 
         # Used to signal to while loop to stop the search
         done = False
@@ -541,23 +540,40 @@ class CausalLanguageModel(LanguageModel):
                 for token_id in vocab:
                     # A hypothesis finishes if EXISTING hypo meets or exceeds group count
                     # Probability of hypo is summed over all next tokens starting with space
-                    token_len = len(self.index_to_word_lower[token_id]) # .replace(" ", "")) # I don't think this is needed
+                    token_len = len(self.index_to_word_lower[token_id]) # .replace(" ", "")) # I don't think this is needed for the non-ambiguous version
+                    new_len = token_len + current[LEN]
+                    new_logp = new_log_probs[current_index][token_id]
                     if (current[LEN]) + pos >= len(left_context) and (self.index_to_word_lower[token_id][0] == " " or token_id in word_end_tokens): # word end tokens, OR text token that starts with space
                         # Add this likelihood to the list of completed predictions 
-                        word_to_log_probs[word] += new_log_probs[current_index][token_id],
+                        word_to_log_probs[word] += new_logp,
+                    elif max_word_len and new_len > max_word_len:
+                        # This hypo exceeds the length limit, skip it
+                        continue
+                    elif beam_logp_best and best_logp and new_logp < best_logp - beam_logp_best:
+                        # This hypo exceeds the logp beam from the best completed hypothesis or best hypothesis in the heap
+                        # print(f"PRUNED: {word + self.index_to_word_lower[token_id]}: {new_logp}")
+                        continue
                     elif not beam_search_max or len(next_hypos) < beam_search_max:
                         # If we are under the beam limit then just add it
                         heapq.heappush(next_hypos,
-                                        (new_log_probs[current_index][token_id],
+                                        (new_logp,
                                         current[SEQ] + [token_id],
                                         current[LEN] + token_len))
+                        if best_logp is None:
+                            best_logp = new_logp
+                        if new_logp > best_logp:
+                            best_logp = new_logp
                         
                     elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
                         # Or replace the worst hypotheses with the new one
                         heapq.heappushpop(next_hypos,
-                                            (new_log_probs[current_index][token_id],
+                                            (new_logp,
                                             current[SEQ] + [token_id],
                                             current[LEN] + token_len))
+                        if best_logp is None:
+                            best_logp = new_logp
+                        if new_logp > best_logp:
+                            best_logp = new_logp
                 
                 # if word in word_to_log_probs.keys():
                 #     print(f'Prediction completed: {word}, {logsumexp(word_to_log_probs[word])}')
@@ -573,6 +589,15 @@ class CausalLanguageModel(LanguageModel):
             # Swap in the extended set as the new current working set
             current_hypos = next_hypos
             next_hypos = []
+            # for word in word_to_log_probs:
+            #     print(f'{word}: {logsumexp(word_to_log_probs[word])}')
+
+            if len(word_to_log_probs):
+                best_logp = max([logsumexp(prob_list) for prob_list in word_to_log_probs.values()])
+            else:
+                best_logp = None
+
+            # print(f'BEST: {best_logp}')
 
         # Word dict for storing final predictions
         predictions = {}
