@@ -2,20 +2,16 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
-def compute_max_hypo_len(left_context: str,
-                         max_word_len: int,
-                        ) -> int:
-    """Compute the maximum length of hypotheses based on existing prefix of word (if any)
-    :param left_context: Previous typed text including any prefix of the current word
-    :param max_word_len: Maximum length of word we want to predict
-    """
-    prefix_len = 0
-    if len(left_context) > 0:
+def compute_max_hypo_len(left_context: str, max_word_len: int) -> int:
+    """Compute the maximum letters we may still generate for the current word."""
+    prefix_letters = 0
+    if left_context:
         pos = len(left_context) - 1
-        while left_context[pos] != " " and pos >= 0:
+        while pos >= 0 and left_context[pos] != " ":
+            if left_context[pos].isalpha():
+                prefix_letters += 1
             pos -= 1
-            prefix_len += 1
-    return max(0, max_word_len - prefix_len)
+    return max(0, max_word_len - prefix_letters)
 
 class LanguageModel(ABC):
     """Parent class for language model classes"""
