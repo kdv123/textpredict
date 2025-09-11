@@ -418,348 +418,181 @@ class CausalLanguageModel(LanguageModel):
         :param return_log_probs: whether to return log probs of each word
         :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
-# Old method signature:
-#    def predict_words(self,
-#                     evidence: List[str],
-#                     nbest: int,
-#                     beam: int,
-#                     max_new_tokens: int = 12,      # 5 was too small; 10–12 is safer
-#                     max_completed: int = 32,        # distinct words
-#                     batch_size: int = 32,
-#                     topk_first: int = 1024,         # top-K within the allowed-first subset
-#                     topk_next: int = 10,            # top-K on subsequent steps
-#                     prune_margin: float = 5.0) -> List[str]:
-#        """
-#        Next-word prediction for subword LMs (GPT-2/OPT/...).
-#
-#        Behavior:
-#          - A word only finishes at a boundary: a space OR terminal punctuation (., !, ?, …),
-#            optionally followed by closers (") ’ ) ] }.
-#          - Punctuation variants of the same word are merged into a single canonical key ('cat', 'cat!!!' -> 'cat').
-#          - No dictionary/lexicon gating; coverage is left to the model.
-#          - First token is restricted by the typed prefix *before* top-K (prevents dropping the right path).
-#
-#        Returns:
-#          Top-N distinct next-word strings ranked by merged log-prob.
-#        """
 
-        # KDV NOTES:
-        # evidence        -> now simple string, left_context
-        # nbest           -> same
-        # beam            -> not used
-        # max_new_tokens  -> max steps of the search algorithm
-        #                    Other models don't have this notion, they use max_word_len instead to prevent models getting stuck in a cycle.
-        #                    For now, hardcoded as local variable and renamed.
-        # max_completed   -> added new param to method max_word_hypotheses to handle this type of pruning
-        # batch_size      -> now an instance variable
-        # topk_first      -> other models don't have this notion, hardcoded as local variable for now
-        # topk_next       -> changed to beam_search_max
-        # prune_margin    -> changed to beam_logp_best
-
-        # TODO: This implementation ignores word_end_symbols
-        # TODO: This implementation ignores max_word_len
-        # TODO: I don't think this handles mixed case predictions only lowercase
-
-        # TODO: These two parameters shouldn't be hardcoded
-        max_search_steps = 12
-        topk_first = 1024
-
-        # We want each language model class set its own default pruning values
-        # We want the client keystroke_savings.py to default to these if pruning switches aren't set
-        if beam_logp_best is None:
-            beam_logp_best = 5.0
-        if beam_search_max is None:
-            beam_search_max = 10
-        if max_word_len is None:
-            max_word_len = 50
-
-        # Since List is a mutable type, we can't set a default reliably in the method declaration
-        # We'll set the default of a trailing space if caller didn't specify a list of right contexts
-        if word_end_symbols is None:
-            word_end_symbols = [" "]
-
-        # Create a hash set to quickly determine if character is in the set of end characters
-        is_word_end = set()
-        for symbol in word_end_symbols:
-            is_word_end.add(symbol)
-
-        assert self.model is not None, "language model does not exist!"
+        assert self.model is not None, "language model does not exist!"        
         start_ns = time.time_ns()
 
-        # ---------------- Context & prefix ----------------
-        #context = "".join(evidence)
-
-        # Split typed context at the last space to obtain current word prefix
         pos = left_context.rfind(" ")
-
-        tokens = list(self.left_context_tokens)
+        tokens = []
+        tokens.extend(self.left_context_tokens)
         if pos >= 0:
-            word_prefix = left_context[pos + 1:]
-            tokens.extend(self._encode(left_context[:pos]))
-        else:
-            word_prefix = left_context
-            tokens.extend(self._encode(""))
+            truncated_context = left_context[0:pos]
+            tokens.extend(self._encode(truncated_context))
+        
+        # print(f"DEBUG, {context_lower} pos {pos}, prefix_len {prefix_len}")
 
-        base_len = len(tokens)  # used to slice newly generated suffix correctly
 
-        # ---------------- Vocab decode cache ----------------
-        if not hasattr(self, 'decoded_vocab') or len(self.decoded_vocab) != self.tokenizer.vocab_size:
-            self.decoded_vocab = [
-                self.tokenizer.decode([tid], skip_special_tokens=True)
-                for tid in range(self.tokenizer.vocab_size)
-            ]
-        special_ids = set(getattr(self.tokenizer, "all_special_ids", []) or [])
+        # TODO: This seems like it should be done at initialization time, not predict time
+        # boundary set (can be overridden by --word-end)
+        if word_end_symbols is None:
+            word_end_symbols = [" ", ",", ".", "?", "!"]
 
-        # ---------------- Allowed first-token set ----------------
-        prefix_cmp = word_prefix.lstrip().lower()
-        at_bos = (pos < 0)
+        word_end_tokens = set()
+        for ch in word_end_symbols:
+            word_end_tokens.add(self._encode(ch)[0])
 
-        if prefix_cmp == "":
-            # Empty prefix: at BOS we prefer no leading-space tokens; mid-sentence we prefer leading-space tokens
-            if at_bos:
-                allowed_first = [
-                    tid for tid, s in enumerate(self.decoded_vocab)
-                    if tid not in special_ids and not s.startswith(" ")
-                ]
-                # fallback: allow everything if tokenizer doesn't separate this well
-                if not allowed_first:
-                    allowed_first = [tid for tid in range(self.tokenizer.vocab_size) if tid not in special_ids]
-            else:
-                allowed_first = [
-                    tid for tid, s in enumerate(self.decoded_vocab)
-                    if tid not in special_ids and s.startswith(" ")
-                ]
-        else:
-            allowed_first = []
-            for tid, s in enumerate(self.decoded_vocab):
-                if tid in special_ids:
-                    continue
-                clean = s.lstrip().lower()
-                if clean.startswith(prefix_cmp) or prefix_cmp.startswith(clean):
-                    allowed_first.append(tid)
+        print(f'Word end tokens: {word_end_tokens}')
 
-        if not allowed_first:
-            return []
+        # Constant indexes for use with the hypotheses tuples
+        LOGP: Final[int] = 0
+        SEQ: Final[int] = 1
+        LEN: Final[int] = 2
 
-        allowed_first_tensor = torch.tensor(allowed_first, device=self.device, dtype=torch.long)
+        # Our starting hypothesis that we'll be extending.
+        # Format is (log likelihood, token id sequence, hypothesis length).
+        # Hypothesis length is the character-length of the prediction - not including any context
+        hypo_length = 0
+        current_hypos = [(0.0, tokens, hypo_length)]
 
-        # ---------------- Boundary & canonicalization helpers ----------------
-        #TRAIL_PUNCT_RE = re.compile(r'[\.!\?…,:;]+$')
-        #CLOSERS_RE     = re.compile(r'[\)\]\}\"\'”’]+$')
-        #ALNUM_RE       = re.compile(r"[A-Za-z0-9]")
+        # We use a priority queue to track the top hypotheses during the beam search.
+        # For a beam of 8, empirical testing showed this was about the same amount
+        # of time as a simpler list that used a linear search to replace when full.
+        heapq.heapify(current_hypos)
 
-        #def canonicalize_word_from_suffix(raw_suffix: str) -> str:
-        #    """
-        #    Given the raw decoded suffix (no tokens from the fixed left context),
-        #    return canonical word key:
-        #      - if a space is present, take up to the first space
-        #      - strip trailing punctuation and closers
-        #     - lowercase
-        #      - require at least one alnum
-        #    """
-        #    t = raw_suffix
-        #    if ' ' in t:
-        #        t = t.split(' ')[0]
-        #    t = CLOSERS_RE.sub('', TRAIL_PUNCT_RE.sub('', t))
-        #    t = t.strip().lower()
-        #    return t if ALNUM_RE.search(t) else ""
+        # Add new extended hypotheses to this heap
+        next_hypos = []
 
-        def canonicalize_word_from_suffix_new(raw_suffix: str) -> str:
-            """
-            Return the word prior to hitting on of the specified end of word symbols
-            """
+        # Tracks log probs of completed hypotheses. Due to casing and tokenizations we might get dupes
+        word_to_log_probs = defaultdict(list)
 
-            # Scan right looking for any character in the end of word set of characters
-            ch_index = 0
-            found_alpha = False
-            while ch_index < len(raw_suffix):
-                ch = raw_suffix[ch_index]
-                if not found_alpha and ch.isalpha():
-                    found_alpha = True
-                if ch in is_word_end:
-                    break
-                ch_index += 1
-            # We need to have found a letter but also must have found an end symbol
-            if found_alpha and ch_index < len(raw_suffix):
-                return raw_suffix[:ch_index].lower()
-            else:
-                return ""
+        # How many hypotheses have we finished?
+        completed = 0
 
-        # ---------------- Beam search state ----------------
-        LOGP, SEQ = 0, 1
-        current_hypos = [(0.0, tokens)]   # (cumulative logp, token_id_sequence)
-        completed_words: dict[str, float] = {}  # word -> merged logp
-        best_completed_logp = -float("inf")
+        # Used to signal to while loop to stop the search
+        done = False
 
-        # KDV, doesn't seem to be a reason to alias this variable
-        #cap_completed = max_completed
+        # Start a beam search forward from the backed off token sequence.
+        # Each iteration of this while loop extends hypotheses by all valid tokens.
+        # We only keep at most beam_search_max hypotheses in the valid heap.
+        # Stop extending search once we reach our max completed target.
+        while len(current_hypos) > 0 and not done:
+            # We'll explore hypothesis in order from most probable to least.
+            # This has little impact on how long it takes since this is only sorting a small number of things.
+            # But it is important with max_completed pruning since we want to bias for completing high probability things.
+            current_hypos.sort(reverse=True)
 
-        # ---------------- Decoding loop (capped by steps) ----------------
-        step = 0
-        with torch.inference_mode():
-            while current_hypos and step < max_search_steps:
-                # Highest-first helps pruning decisions
-                current_hypos.sort(reverse=True)
+            # for hypo in current_hypos:
+            #     print(str(hypo) + ' ' + self.tokenizer.decode(hypo[SEQ]))
 
-                add_logps = [x[LOGP] for x in current_hypos]
-                seqs      = [x[SEQ]  for x in current_hypos]
+            # Work on the hypotheses from the last round of extension.
+            # Create the torch tensor for the inference with a row for each hypothesis.
+            tokens_tensor = torch.tensor([x[SEQ] for x in current_hypos]).reshape(len(current_hypos), -1).to(self.device)
 
-                all_top_vals = []
-                all_top_ids  = []
+            before_inference_ns = time.time_ns()
+            # Ask the LLM to predict tokens that come after our current set of hypotheses
+            with torch.no_grad():
+                # Compute the probabilities from the logits
+                log_probs = torch.log_softmax(self.model(tokens_tensor).logits[:, -1, :], dim=1)
 
-                # ---- Batched forward pass over ragged sequences (pad + attention_mask) ----
+                # Create a big 2D tensor where each row is that hypothesis' current likelihood.
+                # First create a list of just the hypotheses' likelihoods.
+                # Then reshape to be a column vector.
+                # Then duplicate the column based on the number of subword tokens in the LLM.
+                add_tensor = torch.tensor([x[LOGP] for x in current_hypos]).reshape((log_probs.size()[0], 1)).repeat(1, log_probs.size()[1]).to(self.device)
 
-                # If no batch size, we do it all in one inference
-                batch_size_to_use = len(current_hypos)
-                if self.batch_size:
-                    batch_size_to_use = self.batch_size
+                # Add the current likelihoods with each subtoken's probability.
+                # Move it back to the CPU and convert to numpy since this makes it a lot faster to access for some reason.
+                new_log_probs = torch.add(log_probs, add_tensor).detach().cpu().numpy()
+            self.predict_inference_ns += time.time_ns() - before_inference_ns
 
-                for i in range(0, len(current_hypos), batch_size_to_use):
-                    batch_seqs  = seqs[i:i + batch_size_to_use]
-                    batch_logps = add_logps[i:i + batch_size_to_use]
+            for current_index, current in enumerate(current_hypos):
+                # Create a list of token indexes that are a prefix of the target text.
+                vocab = set()
+                # Extending this hypothesis must match the remaining input groups
+                remaining_context = left_context[pos+current[LEN]:]
+                if len(remaining_context) == 0:
+                    # There is no remaining context thus all subword tokens that are valid under our symbol set
+                    # should be considered when computing the probability of the next character.
+                    vocab = self.valid_vocab_set.union(word_end_tokens)
+                else:
+                    for i in range(1, len(remaining_context)):
+                        proper_prefix = remaining_context[:i]
+                        # print(f"remaining groups {remaining_groups}, group prefix {group_prefix}")
+                        # We may need to use a subword token that doesn't completely consume the remaining text.
+                        # Add tokens that are an exact group match for the prefix of reamining input groups
+                        # e.g. "te" for 4,1,4,4
+                        # Do not include full group sequence in this, only proper prefixes
+                        proper_prefix_tok = self._encode(proper_prefix)
+                        if len(proper_prefix_tok) == 1:
+                            vocab.add(proper_prefix_tok[0])
+                            # print(f"Adding token {proper_prefix_tok[0]}, \"{self.index_to_word[proper_prefix_tok[0]]}\"")
 
-                    pad_id = (getattr(self.tokenizer, "pad_token_id", None)
-                              or getattr(self.tokenizer, "eos_token_id", None) or 0)
-                    maxlen = max(len(s) for s in batch_seqs)
-                    input_ids  = [s + [pad_id] * (maxlen - len(s)) for s in batch_seqs]
-                    attn_mask  = [[1] * len(s) + [0] * (maxlen - len(s)) for s in batch_seqs]
+                    # Consider tokens that start with the remaining group sequence
+                    # This includes exact match
+                    vocab = vocab.union(self.vocab_set[remaining_context])
+                    # toks = self.vocab_prefix_space[remaining_context]
+                    # for tok in toks:
+                    #     print(f"Adding token {tok}, \"{self.index_to_word[tok]}\"")
 
-                    input_ids_t  = torch.tensor(input_ids, dtype=torch.long, device=self.device)
-                    attn_mask_t  = torch.tensor(attn_mask, dtype=torch.long, device=self.device)
+                # If we are doing completions, we'll need this 
+                word = self.tokenizer.decode(current[SEQ][len(tokens):]).lower().strip() # DG normalize the word in our finished hypo TODO: will need to change this for cased predictions
 
-                    before = time.time_ns()
-                    out    = self.model(input_ids=input_ids_t, attention_mask=attn_mask_t)
-                    logits = out.logits[:, -1, :].float()  # stability if model is fp16
-                    logp   = torch.log_softmax(logits, dim=-1)
-                    add    = torch.tensor(batch_logps, dtype=logp.dtype, device=self.device).unsqueeze(1)
-                    scores = logp + add  # [B, V] cumulative
+                # We go over all the integer IDs in the vocab list.
+                for token_id in vocab:
+                    # A hypothesis finishes if EXISTING hypo meets or exceeds group count
+                    # Probability of hypo is summed over all next tokens starting with space
+                    token_len = len(self.index_to_word_lower[token_id]) # .replace(" ", "")) # I don't think this is needed
+                    if (current[LEN]) + pos >= len(left_context) and (self.index_to_word_lower[token_id][0] == " " or token_id in word_end_tokens): # word end tokens, OR text token that starts with space
+                        # Add this likelihood to the list of completed predictions 
+                        word_to_log_probs[word] += new_log_probs[current_index][token_id],
+                    elif not beam_search_max or len(next_hypos) < beam_search_max:
+                        # If we are under the beam limit then just add it
+                        heapq.heappush(next_hypos,
+                                        (new_log_probs[current_index][token_id],
+                                        current[SEQ] + [token_id],
+                                        current[LEN] + token_len))
+                        
+                    elif new_log_probs[current_index][token_id] > next_hypos[0][LOGP]:
+                        # Or replace the worst hypotheses with the new one
+                        heapq.heappushpop(next_hypos,
+                                            (new_log_probs[current_index][token_id],
+                                            current[SEQ] + [token_id],
+                                            current[LEN] + token_len))
+                
+                # if word in word_to_log_probs.keys():
+                #     print(f'Prediction completed: {word}, {logsumexp(word_to_log_probs[word])}')
+                # for h in next_hypos:
+                #     print(f'{self.tokenizer.decode(h[SEQ][len(tokens):])}: {h[LOGP]}')
+                # print()
 
-                    if step == 0:
-                        # Restrict BEFORE top-k to the allowed-first subset (prevents dropping correct token)
-                        subset = scores.index_select(1, allowed_first_tensor)
-                        K = min(subset.size(1), topk_first)
-                        top_vals, top_idx = torch.topk(subset, k=K, dim=1, largest=True, sorted=True)
-                        top_ids = allowed_first_tensor[top_idx]
-                    else:
-                        top_vals, top_ids = torch.topk(scores, k=beam_search_max, dim=1, largest=True, sorted=True)
-
-                    self.predict_inference_ns += time.time_ns() - before
-
-                    all_top_vals.append(top_vals)
-                    all_top_ids.append(top_ids)
-
-                if not all_top_vals:
+                # Break out of the for loop over hypotheses and while loop if we reach our max completed goal
+                if max_word_hypotheses and len(word_to_log_probs.items()) >= max_word_hypotheses:
+                    done = True
                     break
 
-                new_log_probs  = torch.cat(all_top_vals, dim=0)   # [H, K]
-                next_token_ids = torch.cat(all_top_ids,  dim=0)   # [H, K]
+            # Swap in the extended set as the new current working set
+            current_hypos = next_hypos
+            next_hypos = []
 
-                next_hypos: list[tuple[float, list[int]]] = []
-                decode_cache: dict[tuple[int, ...], str] = {}
+        # Word dict for storing final predictions
+        predictions = {}
+        for word in word_to_log_probs:
+            predictions[word.lower()] = logsumexp(word_to_log_probs[word])
+          
+        end_ns = time.time_ns()
+        self.predict_total_ns += end_ns - start_ns
 
-                # ---- Expand each hypothesis ----
-                for row_idx, (cur_logp, cur_seq) in enumerate(current_hypos):
-                    cand_ids   = next_token_ids[row_idx].tolist()
-                    cand_logps = new_log_probs[row_idx].tolist()
+        # print(f'Total completed predictions: {completed}')
 
-                    for token_id, cum_logp in zip(cand_ids, cand_logps):
-                        if token_id in special_ids:
-                            continue
+        sorted_return = sorted(predictions.items(), key=lambda item: item[1], reverse=True)
 
-                        new_seq = cur_seq + [token_id]
-
-                        # Decode the *raw* suffix (do not strip leading space yet)
-                        suffix_tokens = new_seq[base_len:]
-                        key = tuple(suffix_tokens)
-                        if key in decode_cache:
-                            raw_suffix = decode_cache[key]
-                        else:
-                            raw_suffix = self.tokenizer.decode(suffix_tokens, skip_special_tokens=True)
-                            decode_cache[key] = raw_suffix
-
-                        # For prefix alignment we lstrip, but for boundary detection we need the raw string
-                        suffix_for_prefix = raw_suffix.lstrip()
-
-                        # Case-insensitive typed-prefix alignment
-                        if not suffix_for_prefix.lower().startswith(prefix_cmp):
-                            continue
-
-                        # Completion on boundary:
-                        #   - There is a space *anywhere* in the decoded suffix (means a word boundary)
-                        #   - Or suffix ends with terminal punctuation and/or closers
-#                        completed_now = False
-#                        if ' ' in suffix_for_prefix:
-#                            # leading space was present -> boundary hit
-#                            completed_now = True
-#                        elif TRAIL_PUNCT_RE.search(suffix_for_prefix) or CLOSERS_RE.search(suffix_for_prefix):
-#                            completed_now = True
-#                        if completed_now:
-#
-#                            canonical = canonicalize_word_from_suffix_new(suffix_for_prefix)
-#                            if not canonical:
-#                                # No meaningful token after boundary
-#                                continue
-
-                        # Scan right looking for any character in the end of word set of characters
-                        ch_index = 0
-                        found_alpha = False
-                        found_word_end = False
-                        while ch_index < len(suffix_for_prefix):
-                            ch = suffix_for_prefix[ch_index]
-                            if not found_alpha and ch.isalpha():
-                                found_alpha = True
-                            if ch in is_word_end:
-                                found_word_end = True
-                                break
-                            ch_index += 1
-
-                        if found_alpha and found_word_end:
-                            canonical = suffix_for_prefix[:ch_index].lower()
-
-                            # Merge duplicates via stable logaddexp
-                            prev = completed_words.get(canonical)
-                            if prev is None:
-                                completed_words[canonical] = cum_logp
-                            else:
-                                m = max(prev, cum_logp)
-                                completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
-
-                            if completed_words[canonical] > best_completed_logp:
-                                best_completed_logp = completed_words[canonical]
-
-                            # Stop when we have enough DISTINCT words
-                            if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
-                                current_hypos = []
-                                break
-                        else:
-                            # Continue the word; prune if far below best completed
-                            if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - beam_logp_best:
-                                continue
-
-                            # Beam maintenance
-                            if not self.beam_width or len(next_hypos) < self.beam_width:
-                                heapq.heappush(next_hypos, (cum_logp, new_seq))
-                            elif cum_logp > next_hypos[0][LOGP]:
-                                heapq.heappushpop(next_hypos, (cum_logp, new_seq))
-
-                    if not current_hypos:
-                        break  # cap reached this step
-
-                if not next_hypos:
-                    break  # no further expansions
-
-                current_hypos = next_hypos
-                step += 1
-
-        # ---------------- Ranking & return ----------------
-        ranked = sorted(completed_words.items(), key=lambda kv: kv[1], reverse=True)
-        results = [w for (w, _) in ranked[:nbest]]
-
-        # KDV: other models only return the suffix and don't include the prefix
-        results = [w[len(word_prefix):] for w in results]
-
-        self.predict_total_ns += time.time_ns() - start_ns
-        return results
+        if nbest:
+            sorted_return = sorted_return[:nbest]
+        
+        if return_log_probs:
+            return sorted_return
+        else:
+            return [tup[0] for tup in sorted_return]
 
     def dump_predict_times(self) -> None:
         """Print some stats about the prediction timing"""
