@@ -1,27 +1,17 @@
 """Defines the language model base class."""
-
-# --- Legacy compatibility constants used by ngram/lm_eval ---
-SPACE_CHAR = " "      # used by older evaluation code to represent a space
-BACKSPACE_CHAR = "<bs>"  # placeholder; not used in your new code paths
-
-def alphabet():
-    # Uppercase A-Z + apostrophe + space (legacy default for lm_eval)
-    return "ABCDEFGHIJKLMNOPQRSTUVWXYZ' "
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
-def compute_max_hypo_len(left_context: str,
-                         max_word_len: int,
-                        ) -> int:
-    """Compute the maximum number of *new* letters we can add given an already-typed prefix."""
-    prefix_len = 0
+def compute_max_hypo_len(left_context: str, max_word_len: int) -> int:
+    """Compute the maximum letters we may still generate for the current word."""
+    prefix_letters = 0
     if left_context:
         pos = len(left_context) - 1
         while pos >= 0 and left_context[pos] != " ":
-            prefix_len += 1
+            if left_context[pos].isalpha():
+                prefix_letters += 1
             pos -= 1
-            
-    return max(0, max_word_len - prefix_len)
+    return max(0, max_word_len - prefix_letters)
 
 class LanguageModel(ABC):
     """Parent class for language model classes"""
