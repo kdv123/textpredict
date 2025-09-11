@@ -604,7 +604,8 @@ class CausalLanguageModel(LanguageModel):
         # Word dict for storing final predictions
         predictions = {}
         for word in word_to_log_probs:
-            predictions[word.lower()] = logsumexp(word_to_log_probs[word])
+            # Remove the known prefix from the start of the prediction
+            predictions[word.lower()[len(left_context) - (pos + 1):]] = logsumexp(word_to_log_probs[word])
           
         end_ns = time.time_ns()
         self.predict_total_ns += end_ns - start_ns
