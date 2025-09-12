@@ -418,46 +418,7 @@ class CausalLanguageModel(LanguageModel):
         :param return_log_probs: whether to return log probs of each word
         :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
-# Old method signature:
-#    def predict_words(self,
-#                     evidence: List[str],
-#                     nbest: int,
-#                     beam: int,
-#                     max_new_tokens: int = 12,      # 5 was too small; 10–12 is safer
-#                     max_completed: int = 32,        # distinct words
-#                     batch_size: int = 32,
-#                     topk_first: int = 1024,         # top-K within the allowed-first subset
-#                     topk_next: int = 10,            # top-K on subsequent steps
-#                     prune_margin: float = 5.0) -> List[str]:
-#        """
-#        Next-word prediction for subword LMs (GPT-2/OPT/...).
-#
-#        Behavior:
-#          - A word only finishes at a boundary: a space OR terminal punctuation (., !, ?, …),
-#            optionally followed by closers (") ’ ) ] }.
-#          - Punctuation variants of the same word are merged into a single canonical key ('cat', 'cat!!!' -> 'cat').
-#          - No dictionary/lexicon gating; coverage is left to the model.
-#          - First token is restricted by the typed prefix *before* top-K (prevents dropping the right path).
-#
-#        Returns:
-#          Top-N distinct next-word strings ranked by merged log-prob.
-#        """
-
-        # KDV NOTES:
-        # evidence        -> now simple string, left_context
-        # nbest           -> same
-        # beam            -> not used
-        # max_new_tokens  -> max steps of the search algorithm
-        #                    Other models don't have this notion, they use max_word_len instead to prevent models getting stuck in a cycle.
-        #                    For now, hardcoded as local variable and renamed.
-        # max_completed   -> added new param to method max_word_hypotheses to handle this type of pruning
-        # batch_size      -> now an instance variable
-        # topk_first      -> other models don't have this notion, hardcoded as local variable for now
-        # topk_next       -> changed to beam_search_max
-        # prune_margin    -> changed to beam_logp_best
-
         # TODO: This implementation ignores word_end_symbols
-        # TODO: This implementation ignores max_word_len
         # TODO: I don't think this handles mixed case predictions only lowercase
 
         # TODO: These two parameters shouldn't be hardcoded
@@ -483,10 +444,8 @@ class CausalLanguageModel(LanguageModel):
 
 
         # ---------------- Context & prefix ----------------
-        #context = "".join(evidence)
 
         # Split typed context at the last space to obtain current word prefix
-        
         pos = left_context.rfind(" ")
 
         tokens = list(self.left_context_tokens)
@@ -526,7 +485,6 @@ class CausalLanguageModel(LanguageModel):
         # Keep first-step recall identical to baseline; only filter by BOS spacing
         # and prefix compatibility.
         prefix_cmp = word_prefix.lstrip().lower()
-        #prefix_alpha_len = sum(1 for ch in prefix_cmp if ch.isalpha())
         at_bos = (pos < 0)
         # Build allowed_first using cached token info
         allowed_first = []
@@ -571,9 +529,6 @@ class CausalLanguageModel(LanguageModel):
         current_hypos = [(0.0, tokens)]   # (cumulative logp, token_id_sequence)
         completed_words: dict[str, float] = {}  # word -> merged logp
         best_completed_logp = -float("inf")
-
-        # KDV, doesn't seem to be a reason to alias this variable
-        #cap_completed = max_completed
 
         # ---------------- Decoding loop (capped by steps) ----------------
         step = 0
@@ -701,22 +656,6 @@ class CausalLanguageModel(LanguageModel):
                         # Case-insensitive, symmetric typed-prefix alignment
                         if prefix_cmp and not _prefix_compatible(suffix_for_prefix.lower(), prefix_cmp):
                             continue
-
-                        # Completion on boundary:
-                        #   - There is a space *anywhere* in the decoded suffix (means a word boundary)
-                        #   - Or suffix ends with terminal punctuation and/or closers
-#                        completed_now = False
-#                        if ' ' in suffix_for_prefix:
-#                            # leading space was present -> boundary hit
-#                            completed_now = True
-#                        elif TRAIL_PUNCT_RE.search(suffix_for_prefix) or CLOSERS_RE.search(suffix_for_prefix):
-#                            completed_now = True
-#                        if completed_now:
-#
-#                            canonical = canonicalize_word_from_suffix_new(suffix_for_prefix)
-#                            if not canonical:
-#                                # No meaningful token after boundary
-#                                continue
 
                         # Word completion detection: stop at first end-of-word symbol,
                         # but only if at least one letter has been seen (avoids empty/pure punctuation).
