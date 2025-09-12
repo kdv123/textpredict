@@ -131,7 +131,7 @@ class CausalLanguageModel(LanguageModel):
                 self.valid_vocab += i,
                 # Add this token ID to all lists for its valid text prefixes
                 for j in range(len(word)):
-                    key = word_lower[0:j + 1]
+                    key = word[0:j + 1]
                     self.vocab[key] += i,
                     # Construct set for prefix of the word
                     self.vocab_set[key].add(i)
