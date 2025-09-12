@@ -25,10 +25,11 @@ class CausalLanguageModel(LanguageModel):
                  beam_width: int = None,
                  fp16: bool = False,
                  max_completed: int = None,
-                 lora: bool = False,
                  lora_path: str = "",
                  batch_size: int = None,
                  predict_lower: bool = True,
+                 max_search_steps: int = 12,
+                 topk_first: int = 1024,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -44,6 +45,8 @@ class CausalLanguageModel(LanguageModel):
             lora_path          - load LoRA adapter from Hugging Face or local directory
             batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
             predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
+            max_search_steps   - maximum number of steps to make during word prediction search
+            topk_first         - pruning size for first step during word prediction search
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -62,6 +65,8 @@ class CausalLanguageModel(LanguageModel):
         self.lora_path = lora_path
         self.batch_size = batch_size
         self.predict_lower = predict_lower
+        self.max_search_steps = max_search_steps
+        self.topk_first = topk_first
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -421,10 +426,6 @@ class CausalLanguageModel(LanguageModel):
         # TODO: This implementation ignores word_end_symbols
         # TODO: I don't think this handles mixed case predictions only lowercase
 
-        # TODO: These two parameters shouldn't be hardcoded
-        max_search_steps = 12
-        topk_first = 1024
-
         # We want each language model class set its own default pruning values
         # We want the client keystroke_savings.py to default to these if pruning switches aren't set
         if beam_logp_best is None:
@@ -537,7 +538,7 @@ class CausalLanguageModel(LanguageModel):
         # Hoist pad_id once (micro-opt, avoids per-batch recomputation).
         pad_id = (getattr(self.tokenizer, "pad_token_id", None) or getattr(self.tokenizer, "eos_token_id", None) or 0)
         with torch.inference_mode():
-            while current_hypos and step < max_search_steps:
+            while current_hypos and step < self.max_search_steps:
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -593,7 +594,7 @@ class CausalLanguageModel(LanguageModel):
                             return []
                         subset = scores.index_select(1, allowed_first_filtered)
                         # Be generous on the first step; prune harder later
-                        base_K = topk_first or 512
+                        base_K = self.topk_first
                         if beam_search_max:
                             base_K = max(base_K, beam_search_max * 4)
 
