@@ -545,7 +545,7 @@ class CausalLanguageModel(LanguageModel):
                     token_len = len(self.index_to_word_lower[token_id]) # .replace(" ", "")) # I don't think this is needed for the non-ambiguous version
                     new_len = token_len + current[LEN]
                     new_logp = new_log_probs[current_index][token_id]
-                    if (current[LEN]) + pos >= len(left_context) and (self.index_to_word_lower[token_id][0] == " " or token_id in word_end_tokens): # word end tokens, OR text token that starts with space
+                    if len(remaining_context) == 0 and (self.index_to_word_lower[token_id][0] == " " or token_id in word_end_tokens): # word end tokens, OR text token that starts with space
                         # Add this likelihood to the list of completed predictions 
                         word_to_log_probs[word] += new_logp,
                     elif max_word_len and new_len > max_word_len:
