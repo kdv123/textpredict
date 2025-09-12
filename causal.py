@@ -28,8 +28,8 @@ class CausalLanguageModel(LanguageModel):
                  lora_path: str = "",
                  batch_size: int = None,
                  predict_lower: bool = True,
-                 max_search_steps: int = 12,
-                 topk_first: int = 1024,
+                 max_search_steps: int = None,
+                 topk_first: int = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -65,8 +65,17 @@ class CausalLanguageModel(LanguageModel):
         self.lora_path = lora_path
         self.batch_size = batch_size
         self.predict_lower = predict_lower
-        self.max_search_steps = max_search_steps
-        self.topk_first = topk_first
+
+        # Set default values if not specified on command line
+        if not max_search_steps:
+            self.max_search_steps = 12
+        else:
+            self.max_search_steps = max_search_steps
+        if not topk_first:
+            self.topk_first = 1024
+        else:
+            self.topk_first = topk_first
+
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
