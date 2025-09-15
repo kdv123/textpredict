@@ -706,11 +706,11 @@ class CausalLanguageModel(LanguageModel):
 
                     #if not current_hypos:
                     #    break  # cap reached this step
-                    cand_index += 1
+                        cand_index += 1
 
                 #if not next_hypos:
                 #    break  # no further expansions
-                row_idx += 1
+                    row_idx += 1
 
                 current_hypos = next_hypos
                 step += 1
