@@ -29,7 +29,6 @@ class CausalLanguageModel(LanguageModel):
                  batch_size: int = None,
                  predict_lower: bool = True,
                  max_search_steps: int = None,
-                 topk_first: int = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -46,7 +45,6 @@ class CausalLanguageModel(LanguageModel):
             batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
             predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
             max_search_steps   - maximum number of steps to make during word prediction search
-            topk_first         - pruning size for first step during word prediction search
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -71,11 +69,6 @@ class CausalLanguageModel(LanguageModel):
             self.max_search_steps = 12
         else:
             self.max_search_steps = max_search_steps
-        if not topk_first:
-            self.topk_first = 1024
-        else:
-            self.topk_first = topk_first
-
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -595,36 +588,18 @@ class CausalLanguageModel(LanguageModel):
                         scores = scores[:, :V_tok]
 
                     if step == 0:
-                        
-                        # First step: restrict to allowed_first and use baseline breadth.
+                        # First step: restrict to allowed_first
                         valid_mask = allowed_first_tensor < scores.size(1)
                         allowed_first_filtered = allowed_first_tensor[valid_mask]
                         if allowed_first_filtered.numel() == 0:
                             return []
                         subset = scores.index_select(1, allowed_first_filtered)
-                        # Be generous on the first step; prune harder later
-# Removing, just directly use the parameter, this code was overriding the parameter for most values
-#                        base_K = self.topk_first
-#                        if beam_search_max:
-#                            base_K = max(base_K, beam_search_max * 4)
-#
-#                       # If prefix is short, expand more; if it’s longer, we can be tighter
-#                        plen = len(prefix_cmp)
-#                        if plen == 0:
-#                            base_K = max(base_K, 1024)
-#                        elif plen == 1:
-#                            base_K = max(base_K, 768)
-#                        # plen >= 2 : keep base_K
-#
-#                        K = min(subset.size(1), base_K)
-                        K = min(self.topk_first, subset.size(1))
 
-                        top_vals, top_idx = torch.topk(subset, k=K, dim=1, largest=True, sorted=True)
+                        top_vals, top_idx = torch.topk(subset, k=min(beam_search_max, subset.size(1)), dim=1, largest=True, sorted=True)
                         top_ids = allowed_first_filtered[top_idx]
                     else:
-                        # Subsequent steps: prune by beam_search_max.
-                        K2 = min(beam_search_max, scores.size(1))
-                        top_vals, top_ids = torch.topk(scores, k=K2, dim=1, largest=True, sorted=True)
+                        # Subsequent steps
+                        top_vals, top_ids = torch.topk(scores, k=min(beam_search_max, scores.size(1)), dim=1, largest=True, sorted=True)
 
                     self.predict_inference_ns += time.time_ns() - before
 

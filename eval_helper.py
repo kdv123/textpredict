@@ -63,7 +63,6 @@ def add_args(parser: ArgumentParser) -> None:
     parser.add_argument("--beam-width", type=int, help="Search beam width for character predictions, subword LLM, recommended value = 8")
     parser.add_argument("--max-completed", type=int, help="Stop character prediction search after this many completed hypotheses, subword LLM, recommended value = 32000")
     parser.add_argument("--max-search-steps", type=int, help="Max search steps in word prediction search of subword LLM")
-    parser.add_argument("--topk-first", type=int, help="Beam size for first step in word prediction search of subword LLM")
 
 def check_args_for_errors(args: Namespace) -> None:
     """
@@ -442,7 +441,6 @@ def load_language_model(args: Namespace,
                                  batch_size=args.batch_size,
                                  predict_lower=args.predict_lower,
                                  max_search_steps=args.max_search_steps,
-                                 topk_first=args.topk_first,
                                  )
 
     if not quiet:
