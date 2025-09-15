@@ -543,7 +543,6 @@ class CausalLanguageModel(LanguageModel):
             done = False
             #while current_hypos and step < self.max_search_steps:
             while current_hypos and not done:
-                print(f"DEBUG, current_hypos: {len(current_hypos)}, done: {done}")
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -622,7 +621,6 @@ class CausalLanguageModel(LanguageModel):
                 #                for row_idx, (cur_logp, cur_seq) in enumerate(current_hypos):
                 row_idx = 0
                 while row_idx < len(current_hypos) and not done:
-                    print(f"DEBUG, row_idx: {row_idx}, done: {done}")
                     (cur_logp, cur_seq) = current_hypos[row_idx]
                     cand_ids   = next_token_ids[row_idx].tolist()
                     cand_logps = new_log_probs[row_idx].tolist()
@@ -636,7 +634,6 @@ class CausalLanguageModel(LanguageModel):
                     #for token_id, cum_logp in zip(cand_ids, cand_logps):
                     cand_index = 0
                     while cand_index < len(cand_ids) and not done:
-                        print(f"DEBUG, cand_index: {cand_index}, len {len(cand_ids)}, done: {done}")
                         token_id = cand_ids[cand_index]
                         cum_logp = cand_logps[cand_index]
 
