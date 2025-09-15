@@ -636,11 +636,12 @@ class CausalLanguageModel(LanguageModel):
                     #for token_id, cum_logp in zip(cand_ids, cand_logps):
                     cand_index = 0
                     while cand_index < len(cand_ids) and not done:
-                        print(f"DEBUG, cand_index: {cand_index}, done: {done}")
+                        print(f"DEBUG, cand_index: {cand_index}, len {len(cand_ids)}, done: {done}")
                         token_id = cand_ids[cand_index]
                         cum_logp = cand_logps[cand_index]
 
                         if token_id in special_ids:
+                            cand_index += 1
                             continue
 
                         new_seq = cur_seq + [token_id]
@@ -655,6 +656,7 @@ class CausalLanguageModel(LanguageModel):
 
                         # Case-insensitive, symmetric typed-prefix alignment
                         if prefix_cmp and not _prefix_compatible(suffix_for_prefix.lower(), prefix_cmp):
+                            cand_index += 1
                             continue
 
                         # Word completion detection: stop at first end-of-word symbol,
@@ -696,9 +698,11 @@ class CausalLanguageModel(LanguageModel):
                         else:
                             # Limit generated letters beyond the typed prefix to avoid runaway expansions.
                             if letters > max_hypo_len:
+                                cand_index += 1
                                 continue
                             # Continue the word; prune if far below best completed
                             if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - beam_logp_best:
+                                cand_index += 1
                                 continue
 
                             # Beam maintenance using a min-heap over cumulative logp.
