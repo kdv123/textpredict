@@ -692,15 +692,15 @@ class CausalLanguageModel(LanguageModel):
                                 #current_hypos = []
                                 done = True
                                 break
-                        else:
+                        elif letters <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
                             # Limit generated letters beyond the typed prefix to avoid runaway expansions.
-                            if letters > max_hypo_len:
-                                cand_index += 1
-                                continue
+                            #if letters > max_hypo_len:
+                            #    cand_index += 1
+                            #    continue
                             # Continue the word; prune if far below best completed
-                            if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - beam_logp_best:
-                                cand_index += 1
-                                continue
+                            #if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - beam_logp_best:
+                            #    cand_index += 1
+                            #    continue
 
                             # Beam maintenance using a min-heap over cumulative logp.
                             if len(next_hypos) < beam_search_max:
