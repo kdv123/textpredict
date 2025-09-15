@@ -542,7 +542,7 @@ class CausalLanguageModel(LanguageModel):
         with torch.inference_mode():
             done = False
             #while current_hypos and step < self.max_search_steps:
-            while current_hypos and not done:
+            while current_hypos and not done and step < self.max_search_steps:
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
