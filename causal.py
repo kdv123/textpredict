@@ -540,7 +540,9 @@ class CausalLanguageModel(LanguageModel):
         # Hoist pad_id once (micro-opt, avoids per-batch recomputation).
         pad_id = (getattr(self.tokenizer, "pad_token_id", None) or getattr(self.tokenizer, "eos_token_id", None) or 0)
         with torch.inference_mode():
-            while current_hypos and step < self.max_search_steps:
+            done = False
+            #while current_hypos and step < self.max_search_steps:
+            while current_hypos and not done:
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -616,7 +618,10 @@ class CausalLanguageModel(LanguageModel):
                 
 
                 # ---- Expand each hypothesis ----
-                for row_idx, (cur_logp, cur_seq) in enumerate(current_hypos):
+                #                for row_idx, (cur_logp, cur_seq) in enumerate(current_hypos):
+                row_idx = 0
+                while row_idx < len(current_hypos) and not done:
+                    (cur_logp, cur_seq) = current_hypos[row_idx]
                     cand_ids   = next_token_ids[row_idx].tolist()
                     cand_logps = new_log_probs[row_idx].tolist()
                     # Reuse parent's decoded suffix (tokens after base_len).
@@ -626,7 +631,12 @@ class CausalLanguageModel(LanguageModel):
                         prev_raw = "".join(self._tok_norm[tid] for tid in prev_key) if prev_key else ""
                         decode_cache[prev_key] = prev_raw
                         
-                    for token_id, cum_logp in zip(cand_ids, cand_logps):
+                    #for token_id, cum_logp in zip(cand_ids, cand_logps):
+                    cand_index = 0
+                    while cand_index < len(cand_ids) and not done:
+                        token_id = cand_ids[cand_index]
+                        cum_logp = cand_logps[cand_index]
+
                         if token_id in special_ids:
                             continue
 
@@ -677,7 +687,8 @@ class CausalLanguageModel(LanguageModel):
 
                             # Stop early if we reached cap on DISTINCT completed words.
                             if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
-                                current_hypos = []
+                                #current_hypos = []
+                                done = True
                                 break
                         else:
                             # Limit generated letters beyond the typed prefix to avoid runaway expansions.
@@ -693,11 +704,13 @@ class CausalLanguageModel(LanguageModel):
                             elif cum_logp > next_hypos[0][LOGP]:
                                 heapq.heappushpop(next_hypos, (cum_logp, new_seq))
 
-                    if not current_hypos:
-                        break  # cap reached this step
+                    #if not current_hypos:
+                    #    break  # cap reached this step
+                    cand_index += 1
 
-                if not next_hypos:
-                    break  # no further expansions
+                #if not next_hypos:
+                #    break  # no further expansions
+                row_idx += 1
 
                 current_hypos = next_hypos
                 step += 1
