@@ -603,19 +603,21 @@ class CausalLanguageModel(LanguageModel):
                             return []
                         subset = scores.index_select(1, allowed_first_filtered)
                         # Be generous on the first step; prune harder later
-                        base_K = self.topk_first
-                        if beam_search_max:
-                            base_K = max(base_K, beam_search_max * 4)
-
-                        # If prefix is short, expand more; if it’s longer, we can be tighter
-                        plen = len(prefix_cmp)
-                        if plen == 0:
-                            base_K = max(base_K, 1024)
-                        elif plen == 1:
-                            base_K = max(base_K, 768)
-                        # plen >= 2 : keep base_K
-
-                        K = min(subset.size(1), base_K)
+# Removing, just directly use the parameter, this code was overriding the parameter for most values
+#                        base_K = self.topk_first
+#                        if beam_search_max:
+#                            base_K = max(base_K, beam_search_max * 4)
+#
+#                       # If prefix is short, expand more; if it’s longer, we can be tighter
+#                        plen = len(prefix_cmp)
+#                        if plen == 0:
+#                            base_K = max(base_K, 1024)
+#                        elif plen == 1:
+#                            base_K = max(base_K, 768)
+#                        # plen >= 2 : keep base_K
+#
+#                        K = min(subset.size(1), base_K)
+                        K = min(self.topk_first, subset.size(1))
 
                         top_vals, top_idx = torch.topk(subset, k=K, dim=1, largest=True, sorted=True)
                         top_ids = allowed_first_filtered[top_idx]
