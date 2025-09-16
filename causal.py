@@ -539,6 +539,9 @@ class CausalLanguageModel(LanguageModel):
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
+                for hypo in current_hypos:
+                    print(f"DEBUG, hypo {hypo}")
+
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
 
