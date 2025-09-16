@@ -535,7 +535,7 @@ class CausalLanguageModel(LanguageModel):
         with torch.inference_mode():
             done = False
             while current_hypos and not done and step < self.max_search_steps:
-                print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
+                #print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -681,7 +681,7 @@ class CausalLanguageModel(LanguageModel):
                                             done = True
                                             break
                                     elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
-                                        print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
+                                        #print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
 
                                         # Beam maintenance using a min-heap over cumulative logp.
                                         if len(next_hypos) < beam_search_max:
