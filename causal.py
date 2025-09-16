@@ -28,7 +28,6 @@ class CausalLanguageModel(LanguageModel):
                  lora_path: str = "",
                  batch_size: int = None,
                  predict_lower: bool = True,
-                 max_search_steps: int = None,
                  ):
         """
         Initialize instance variables and load the language model with given path
@@ -44,7 +43,6 @@ class CausalLanguageModel(LanguageModel):
             lora_path          - load LoRA adapter from Hugging Face or local directory
             batch_size         - batch size for doing multiple inferences at same time (currently used only in predict_word)
             predict_lower      - if we internally marginalize predictions based on upper and lowercase hypotheses
-            max_search_steps   - maximum number of steps to make during word prediction search
         """
         super().__init__(symbol_set=symbol_set)
         self.model = None
@@ -63,12 +61,6 @@ class CausalLanguageModel(LanguageModel):
         self.lora_path = lora_path
         self.batch_size = batch_size
         self.predict_lower = predict_lower
-
-        # Set default values if not specified on command line
-        if not max_search_steps:
-            self.max_search_steps = 12
-        else:
-            self.max_search_steps = max_search_steps
 
         # Hash set versions that we'll create that let us quickly check token IDs against our entire
         # valid set, or in a subset based on a text prefix.
@@ -526,7 +518,7 @@ class CausalLanguageModel(LanguageModel):
         completed_words: dict[str, float] = {}  # word -> merged logp
         best_completed_logp = -float("inf")
 
-        # ---------------- Decoding loop (capped by steps) ----------------
+        # ---------------- Decoding loop ----------------
         step = 0
         # Cache from suffix token-tuples to decoded strings (incremental decode).
         decode_cache: dict[tuple[int, ...], str] = {}
@@ -534,13 +526,9 @@ class CausalLanguageModel(LanguageModel):
         pad_id = (getattr(self.tokenizer, "pad_token_id", None) or getattr(self.tokenizer, "eos_token_id", None) or 0)
         with torch.inference_mode():
             done = False
-            while current_hypos and not done and step < self.max_search_steps:
-                #print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
+            while current_hypos and not done:
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
-
-                #for hypo in current_hypos:
-                #    print(f"DEBUG, hypo {hypo}")
 
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
@@ -660,7 +648,7 @@ class CausalLanguageModel(LanguageModel):
                                     ch_index += 1
 
                                 # We drop any hypotheses that don't have at least a single alpha character
-                                # This prevents never ending extension of tokens of whitespace for example
+                                # This prevents never ending extension of tokens of all whitespace for example
                                 if found_alpha:
                                     if found_word_end:
                                         canonical = suffix_for_prefix[:ch_index].lower()
@@ -681,8 +669,6 @@ class CausalLanguageModel(LanguageModel):
                                             done = True
                                             break
                                     elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
-                                        #print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
-
                                         # Beam maintenance using a min-heap over cumulative logp.
                                         if len(next_hypos) < beam_search_max:
                                             heapq.heappush(next_hypos, (cum_logp, new_seq))
