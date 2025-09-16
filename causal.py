@@ -659,32 +659,35 @@ class CausalLanguageModel(LanguageModel):
                                         break
                                     ch_index += 1
 
-                                if found_alpha and found_word_end:
-                                    canonical = suffix_for_prefix[:ch_index].lower()
+                                # We drop any hypotheses that don't have at least a single alpha character
+                                # This prevents never ending extension of tokens of whitespace for example
+                                if found_alpha:
+                                    if found_word_end:
+                                        canonical = suffix_for_prefix[:ch_index].lower()
 
-                                    # Merge duplicates via stable logaddexp (accumulate multiple paths).
-                                    prev = completed_words.get(canonical)
-                                    if prev is None:
-                                        completed_words[canonical] = cum_logp
-                                    else:
-                                        m = max(prev, cum_logp)
-                                        completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
-                                    # Track best completed to enable beam pruning.
-                                    if completed_words[canonical] > best_completed_logp:
-                                        best_completed_logp = completed_words[canonical]
+                                        # Merge duplicates via stable logaddexp (accumulate multiple paths).
+                                        prev = completed_words.get(canonical)
+                                        if prev is None:
+                                            completed_words[canonical] = cum_logp
+                                        else:
+                                            m = max(prev, cum_logp)
+                                            completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
+                                        # Track best completed to enable beam pruning.
+                                        if completed_words[canonical] > best_completed_logp:
+                                            best_completed_logp = completed_words[canonical]
 
-                                    # Stop early if we reached cap on DISTINCT completed words.
-                                    if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
-                                        done = True
-                                        break
-                                elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
-                                    print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
+                                        # Stop early if we reached cap on DISTINCT completed words.
+                                        if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
+                                            done = True
+                                            break
+                                    elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
+                                        print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
 
-                                    # Beam maintenance using a min-heap over cumulative logp.
-                                    if len(next_hypos) < beam_search_max:
-                                        heapq.heappush(next_hypos, (cum_logp, new_seq))
-                                    elif cum_logp > next_hypos[0][LOGP]:
-                                        heapq.heappushpop(next_hypos, (cum_logp, new_seq))
+                                        # Beam maintenance using a min-heap over cumulative logp.
+                                        if len(next_hypos) < beam_search_max:
+                                            heapq.heappush(next_hypos, (cum_logp, new_seq))
+                                        elif cum_logp > next_hypos[0][LOGP]:
+                                            heapq.heappushpop(next_hypos, (cum_logp, new_seq))
 
                         cand_index += 1
 
