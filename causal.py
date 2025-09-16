@@ -421,7 +421,7 @@ class CausalLanguageModel(LanguageModel):
 
         # We want each language model class set its own default pruning values
         # We want the client keystroke_savings.py to default to these if pruning switches aren't set
-        # These were found during tuning experiments on 4 AAC like test sets, up max_word_hypotheses to be
+        # Values using for EMNLP 2025 paper
         if beam_logp_best is None:
             beam_logp_best = 7.0
         if beam_search_max is None:

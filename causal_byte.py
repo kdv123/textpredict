@@ -185,6 +185,7 @@ class CausalByteLanguageModel(LanguageModel):
 
         # We want each language model class set its own default pruning values
         # We want the client keystroke_savings.py to default to these if pruning switches aren't set
+        # Values using for EMNLP 2025 paper
         if beam_logp_best is None:
             beam_logp_best = 8.0
         if beam_search_max is None:
