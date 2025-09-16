@@ -425,7 +425,6 @@ class CausalLanguageModel(LanguageModel):
         :param return_log_probs: whether to return log probs of each word
         :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
-        # TODO: This implementation ignores word_end_symbols
         # TODO: I don't think this handles mixed case predictions only lowercase
 
         # We want each language model class set its own default pruning values
@@ -445,7 +444,6 @@ class CausalLanguageModel(LanguageModel):
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
 
-
         # ---------------- Context & prefix ----------------
 
         # Split typed context at the last space to obtain current word prefix
@@ -461,7 +459,6 @@ class CausalLanguageModel(LanguageModel):
 
         base_len = len(tokens)
         max_hypo_len = compute_max_hypo_len(left_context=left_context, max_word_len=max_word_len)
-
 
         # ---------------- Vocab decode cache ----------------
         # Build decoded strings for each token *once*, outside the loop, so we
@@ -482,7 +479,6 @@ class CausalLanguageModel(LanguageModel):
             self._tok_leading_space = [s.startswith(" ")   for s in self.decoded_vocab]
             _ap_map = {ord("’"): ord("'"), ord("‘"): ord("'")}
             self._tok_norm          = [s.translate(_ap_map) for s in self.decoded_vocab]
-
 
         # ---------------- Allowed first-token set ----------------
         # Keep first-step recall identical to baseline; only filter by BOS spacing
@@ -524,9 +520,6 @@ class CausalLanguageModel(LanguageModel):
                 return True
             return sfx_lc.startswith(pfx_lc) or pfx_lc.startswith(sfx_lc)
 
-
-                
-
         # ---------------- Beam search state ----------------
         LOGP, SEQ = 0, 1
         current_hypos = [(0.0, tokens)]   # (cumulative logp, token_id_sequence)
@@ -542,6 +535,7 @@ class CausalLanguageModel(LanguageModel):
         with torch.inference_mode():
             done = False
             while current_hypos and not done and step < self.max_search_steps:
+                print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -655,9 +649,8 @@ class CausalLanguageModel(LanguageModel):
                                 letters = 0
                                 while ch_index < len(suffix_for_prefix):
                                     ch = suffix_for_prefix[ch_index]
-                                    if not found_alpha and ch.isalpha():
-                                        found_alpha = True
                                     if ch.isalpha():
+                                        found_alpha = True
                                         letters += 1
                                     if ch in is_word_end:
                                         found_word_end = True
