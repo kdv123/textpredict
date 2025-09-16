@@ -542,7 +542,7 @@ class CausalLanguageModel(LanguageModel):
         with torch.inference_mode():
             done = False
             while current_hypos and not done and step < self.max_search_steps:
-                print(f"DEBUG, current {len(current_hypos)}, step {step}")
+                print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
 
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
@@ -617,13 +617,13 @@ class CausalLanguageModel(LanguageModel):
 
                 next_hypos: list[tuple[float, list[int]]] = []
 
+
                 # ---- Expand each hypothesis ----
                 row_idx = 0
                 while row_idx < len(current_hypos) and not done:
                     (cur_logp, cur_seq) = current_hypos[row_idx]
                     cand_ids   = next_token_ids[row_idx].tolist()
                     cand_logps = new_log_probs[row_idx].tolist()
-
                     # Reuse parent's decoded suffix (tokens after base_len).
                     prev_key = tuple(cur_seq[base_len:])
                     prev_raw = decode_cache.get(prev_key)
@@ -636,64 +636,67 @@ class CausalLanguageModel(LanguageModel):
                         token_id = cand_ids[cand_index]
                         cum_logp = cand_logps[cand_index]
 
-                        if token_id not in special_ids:
-                            new_seq = cur_seq + [token_id]
+                        if token_id in special_ids:
+                            cand_index += 1
+                            continue
 
-                            # Incremental decode using normalized token text (curly -> straight already)
-                            token_txt   = self._tok_norm[token_id]
-                            raw_suffix  = prev_raw + token_txt
-                            new_key     = prev_key + (token_id,)
-                            decode_cache[new_key] = raw_suffix
+                        new_seq = cur_seq + [token_id]
 
-                            # For prefix alignment, strip leading space; compare case-insensitive.
-                            suffix_for_prefix = raw_suffix.lstrip()
+                        # Incremental decode using normalized token text (curly -> straight already)
+                        token_txt   = self._tok_norm[token_id]
+                        raw_suffix  = prev_raw + token_txt
+                        new_key     = prev_key + (token_id,)
+                        decode_cache[new_key] = raw_suffix
+                        # For prefix alignment, strip leading space; compare case-insensitive.
+                        suffix_for_prefix = raw_suffix.lstrip()
 
-                            # Case-insensitive, symmetric typed-prefix alignment
-                            if not prefix_cmp or _prefix_compatible(suffix_for_prefix.lower(), prefix_cmp):
-                                # Word completion detection: stop at first end-of-word symbol,
-                                # but only if at least one letter has been seen (avoids empty/pure punctuation).
-                                ch_index = 0
-                                found_alpha = False
-                                found_word_end = False
-                                letters = 0
-                                while ch_index < len(suffix_for_prefix) and not found_word_end:
-                                    ch = suffix_for_prefix[ch_index]
-                                    if ch.isalpha():
-                                        found_alpha = True
-                                        letters += 1
-                                    found_word_end = ch in is_word_end
-                                    ch_index += 1
+                        # Case-insensitive, symmetric typed-prefix alignment
+                        if prefix_cmp and not _prefix_compatible(suffix_for_prefix.lower(), prefix_cmp):
+                            cand_index += 1
+                            continue
 
-                                if found_alpha and found_word_end:
-                                    canonical = suffix_for_prefix[:ch_index].lower()
+                        # Word completion detection: stop at first end-of-word symbol,
+                        # but only if at least one letter has been seen (avoids empty/pure punctuation).
+                        ch_index = 0
+                        found_alpha = False
+                        found_word_end = False
+                        letters = 0
+                        while ch_index < len(suffix_for_prefix) and not found_word_end:
+                            ch = suffix_for_prefix[ch_index]
+                            if ch.isalpha():
+                                found_alpha = True
+                                letters += 1
+                            found_word_end = ch in is_word_end
+                            ch_index += 1
 
-                                    # Merge duplicates via stable logaddexp (accumulate multiple paths).
-                                    prev = completed_words.get(canonical)
-                                    if prev is None:
-                                        completed_words[canonical] = cum_logp
-                                    else:
-                                        m = max(prev, cum_logp)
-                                        completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
-                                    # Track best completed to enable beam pruning.
-                                    if completed_words[canonical] > best_completed_logp:
-                                        best_completed_logp = completed_words[canonical]
+                        if found_alpha and found_word_end:
+                            canonical = suffix_for_prefix[:ch_index].lower()
 
-                                    # Stop early if we reached cap on DISTINCT completed words.
-                                    if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
-                                        done = True
-                                        break
-                                # Limit generated letters beyond the typed prefix to avoid runaway expansions
-                                # Prune if far below best completed
-                                elif letters <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
-                                    # Beam maintenance using a min-heap over cumulative logp.
-                                    if len(next_hypos) < beam_search_max:
-                                        heapq.heappush(next_hypos, (cum_logp, new_seq))
-                                    elif cum_logp > next_hypos[0][LOGP]:
-                                        heapq.heappushpop(next_hypos, (cum_logp, new_seq))
+                            # Merge duplicates via stable logaddexp (accumulate multiple paths).
+                            prev = completed_words.get(canonical)
+                            if prev is None:
+                                completed_words[canonical] = cum_logp
+                            else:
+                                m = max(prev, cum_logp)
+                                completed_words[canonical] = m + math.log(math.exp(prev - m) + math.exp(cum_logp - m))
+                            # Track best completed to enable beam pruning.
+                            if completed_words[canonical] > best_completed_logp:
+                                best_completed_logp = completed_words[canonical]
+
+                            # Stop early if we reached cap on DISTINCT completed words.
+                            if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
+                                done = True
+                                break
+                        # Limit generated letters beyond the typed prefix to avoid runaway expansions
+                        # Prune if far below best completed
+                        elif letters <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
+                            # Beam maintenance using a min-heap over cumulative logp.
+                            if len(next_hypos) < beam_search_max:
+                                heapq.heappush(next_hypos, (cum_logp, new_seq))
+                            elif cum_logp > next_hypos[0][LOGP]:
+                                heapq.heappushpop(next_hypos, (cum_logp, new_seq))
                         cand_index += 1
-
                     row_idx += 1
-
                 current_hypos = next_hypos
                 step += 1
 
