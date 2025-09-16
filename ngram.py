@@ -76,7 +76,9 @@ class NGramLanguageModel(LanguageModel):
         if beam_search_max is None:
             beam_search_max = 100
         if max_word_len is None:
-            max_word_len = 50
+            max_word_len = 25
+        if max_word_hypotheses is None:
+            max_word_hypotheses = 256
 
         # Since List is a mutable type, we can't set a default reliably in the method declaration
         # We'll set the default of a trailing space if caller didn't specify a list of right contexts
