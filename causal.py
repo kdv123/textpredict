@@ -541,9 +541,8 @@ class CausalLanguageModel(LanguageModel):
         pad_id = (getattr(self.tokenizer, "pad_token_id", None) or getattr(self.tokenizer, "eos_token_id", None) or 0)
         with torch.inference_mode():
             done = False
+            #while current_hypos and step < self.max_search_steps:
             while current_hypos and not done and step < self.max_search_steps:
-                print(f"DEBUG, hypos {len(current_hypos)}, step {step}, completed {len(completed_words)}")
-
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
@@ -619,6 +618,7 @@ class CausalLanguageModel(LanguageModel):
 
 
                 # ---- Expand each hypothesis ----
+                #                for row_idx, (cur_logp, cur_seq) in enumerate(current_hypos):
                 row_idx = 0
                 while row_idx < len(current_hypos) and not done:
                     (cur_logp, cur_seq) = current_hypos[row_idx]
@@ -631,6 +631,7 @@ class CausalLanguageModel(LanguageModel):
                         prev_raw = "".join(self._tok_norm[tid] for tid in prev_key) if prev_key else ""
                         decode_cache[prev_key] = prev_raw
                         
+                    #for token_id, cum_logp in zip(cand_ids, cand_logps):
                     cand_index = 0
                     while cand_index < len(cand_ids) and not done:
                         token_id = cand_ids[cand_index]
@@ -661,12 +662,15 @@ class CausalLanguageModel(LanguageModel):
                         found_alpha = False
                         found_word_end = False
                         letters = 0
-                        while ch_index < len(suffix_for_prefix) and not found_word_end:
+                        while ch_index < len(suffix_for_prefix):
                             ch = suffix_for_prefix[ch_index]
-                            if ch.isalpha():
+                            if not found_alpha and ch.isalpha():
                                 found_alpha = True
+                            if ch.isalpha():
                                 letters += 1
-                            found_word_end = ch in is_word_end
+                            if ch in is_word_end:
+                                found_word_end = True
+                                break
                             ch_index += 1
 
                         if found_alpha and found_word_end:
@@ -685,18 +689,33 @@ class CausalLanguageModel(LanguageModel):
 
                             # Stop early if we reached cap on DISTINCT completed words.
                             if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
+                                #current_hypos = []
                                 done = True
                                 break
-                        # Limit generated letters beyond the typed prefix to avoid runaway expansions
-                        # Prune if far below best completed
                         elif letters <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
+                            # Limit generated letters beyond the typed prefix to avoid runaway expansions.
+                            #if letters > max_hypo_len:
+                            #    cand_index += 1
+                            #    continue
+                            # Continue the word; prune if far below best completed
+                            #if best_completed_logp > -float("inf") and cum_logp < best_completed_logp - beam_logp_best:
+                            #    cand_index += 1
+                            #    continue
+
                             # Beam maintenance using a min-heap over cumulative logp.
                             if len(next_hypos) < beam_search_max:
                                 heapq.heappush(next_hypos, (cum_logp, new_seq))
                             elif cum_logp > next_hypos[0][LOGP]:
                                 heapq.heappushpop(next_hypos, (cum_logp, new_seq))
+
+                    #if not current_hypos:
+                    #    break  # cap reached this step
                         cand_index += 1
+
+                #if not next_hypos:
+                #    break  # no further expansions
                     row_idx += 1
+
                 current_hypos = next_hypos
                 step += 1
 
