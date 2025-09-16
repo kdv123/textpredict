@@ -539,8 +539,8 @@ class CausalLanguageModel(LanguageModel):
                 # Highest-first helps pruning decisions
                 current_hypos.sort(reverse=True)
 
-                for hypo in current_hypos:
-                    print(f"DEBUG, hypo {hypo}")
+                #for hypo in current_hypos:
+                #    print(f"DEBUG, hypo {hypo}")
 
                 add_logps = [x[LOGP] for x in current_hypos]
                 seqs      = [x[SEQ]  for x in current_hypos]
@@ -678,6 +678,8 @@ class CausalLanguageModel(LanguageModel):
                                         done = True
                                         break
                                 elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
+                                    print(f"DEBUG, hypo {current_hypos[row_idx]}, '{suffix_for_prefix}'")
+
                                     # Beam maintenance using a min-heap over cumulative logp.
                                     if len(next_hypos) < beam_search_max:
                                         heapq.heappush(next_hypos, (cum_logp, new_seq))
