@@ -649,12 +649,11 @@ class CausalLanguageModel(LanguageModel):
                                 ch_index = 0
                                 found_alpha = False
                                 found_word_end = False
-                                letters = 0
+
                                 while ch_index < len(suffix_for_prefix):
                                     ch = suffix_for_prefix[ch_index]
                                     if ch.isalpha():
                                         found_alpha = True
-                                        letters += 1
                                     if ch in is_word_end:
                                         found_word_end = True
                                         break
@@ -678,7 +677,7 @@ class CausalLanguageModel(LanguageModel):
                                     if max_word_hypotheses and len(completed_words) >= max_word_hypotheses:
                                         done = True
                                         break
-                                elif letters <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
+                                elif len(suffix_for_prefix) <= max_hypo_len and cum_logp >= best_completed_logp - beam_logp_best:
                                     # Beam maintenance using a min-heap over cumulative logp.
                                     if len(next_hypos) < beam_search_max:
                                         heapq.heappush(next_hypos, (cum_logp, new_seq))
