@@ -11,7 +11,6 @@ from collections import defaultdict
 from typing import Final
 from peft import AutoPeftModelForCausalLM
 import math
-import re
 
 class CausalLanguageModel(LanguageModel):
     """Character language model based on a pre-trained causal transformer language model."""
@@ -50,7 +49,6 @@ class CausalLanguageModel(LanguageModel):
         self.vocab_size = 0
         self.valid_vocab = []
         self.vocab = defaultdict(list)
-        # Since subword token ids are integers, use a list instead of a dictionary
         self.index_to_word = []
         self.index_to_word_lower = []
         self.symbol_set_lower = None
@@ -146,7 +144,7 @@ class CausalLanguageModel(LanguageModel):
 
         if "deepseek" in self.model_name.lower():
             if self.left_context and len(self.left_context) > 0:
-                # This model doesn't seem to have a string we can map, always adds 128000 size of vocab to start of tokens
+                # This model doesn't seem to have a string we can map, always adds 128000 = size of vocab to start of tokens
                 print(f"WARNING: DeepSeek doesn't support custom left context! Using blank left context.")
             self.left_context = ""
             self.drop_first_token = True
@@ -163,8 +161,7 @@ class CausalLanguageModel(LanguageModel):
                 else:
                     self.left_context = "</s>"
             # OPT, Llama and Mistral all insert start token
-            self.drop_first_token = (self.model_name.startswith("facebook/opt") or
-                                     self.model_name.startswith("figmtu/opt") or
+            self.drop_first_token = ("/opt" in self.model_name or
                                      "Llama" in self.model_name or
                                      "Mistral" in self.model_name)
 
@@ -177,7 +174,6 @@ class CausalLanguageModel(LanguageModel):
         # Both OPT and Llama automatically insert a start token which we want to control ourselves
         if len(tokens) > 1 and self.drop_first_token:
             tokens = tokens[1:]
-
         return tokens
 
     def _sequence_string(self, sequence: List[int]) -> str:
@@ -209,11 +205,10 @@ class CausalLanguageModel(LanguageModel):
         Response:
             A list of symbols with probability
         """
+        # TODO: add support for prediction of mixed case
 
         assert self.model is not None, "language model does not exist!"
         start_ns = time.time_ns()
-
-        # TODO: add support for prediction of mixed case
 
         converted_context = "".join(evidence)
         converted_context_lower = converted_context.lower()
@@ -324,19 +319,6 @@ class CausalLanguageModel(LanguageModel):
                             #extra_vocab += tokenization[0],
                             extra_vocab_set.add(tokenization[0])
 
-                # The below for-loop takes the most time (other than the GPU inference and sort).
-                #
-                # Tuning notes:
-                #  - With a beam of 8 and max completed of 32,000, getting around 5x speedup on written dev set.
-                #  - This results in a PPL increase of 0.0025 versus old results using only beam of >= 8.
-                #  - Pruning based on log probability difference and based on minimum number of hypotheses per symbol in alphabet did worse.
-                #  - Code for these other pruning methods was removed.
-                #  - Pruning to  top sorted tokens didn't speed it compared to max completed.
-                #  - Currently 65% of time spent in GPU code block.
-                # Possible ways to make it faster:
-                #  - Search in parallel, Python 3.13 and threads without GIL?
-                #  - Do matrix multiply with mask matrix to zero out invalid token IDs
-
                 # Explore the token predictions in order from most to least probable.
                 for token_id in sorted_args[current_index]:
                     if token_id in vocab_set or token_id in extra_vocab_set:
@@ -417,7 +399,7 @@ class CausalLanguageModel(LanguageModel):
         :param return_log_probs: whether to return log probs of each word
         :return: Text sequences that could complete the current word prefix (if any) and (optionally) their log probs
         """
-        # TODO: I don't think this handles mixed case predictions only lowercase
+        # TODO: handle mixed case predictions
 
         # We want each language model class set its own default pruning values
         # We want the client keystroke_savings.py to default to these if pruning switches aren't set
