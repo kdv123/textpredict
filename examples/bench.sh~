@@ -1,0 +1,11 @@
+# Causal LLM using a pretrained Hugging Face model without fine-tuning
+# Note: If you wanted to evaluate your own local fine-tuned model, you would specify --model-dir
+
+MODEL_NAME=facebook/opt-350m
+NAME=bench
+
+PHRASES=comm_dev_letter.txt
+wc -l -w ${PHRASES}
+
+../lm_eval.py --phrases ${PHRASES} --model 4 --verbose 1 --add-char "'" --model-name ${MODEL_NAME} --beam-width 2 --max-completed 16000 --case-simple --ppl-file ${NAME}.ppl --phrase-limit 3 --best-token-limit 2000
+
