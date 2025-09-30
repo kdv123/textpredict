@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # Dumps the text of all tokens of a LLM to standard out.
+# Or can show the tokenization of a specific string.
 
 from causal import CausalLanguageModel
 from causal_byte import CausalByteLanguageModel
