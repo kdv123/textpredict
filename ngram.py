@@ -5,6 +5,7 @@ from exceptions import InvalidLanguageModelException
 import kenlm
 import numpy as np
 import heapq
+from os import path
 
 # TODO: add support for mixed case n-gram models, currently assumes only lowercase plus punctuation
 
@@ -19,23 +20,21 @@ class NGramLanguageModel(LanguageModel):
         """
         Construct an instance of NGramLanguageModel.
         :param symbol_set: symbols we want to make predictions over
-        :param lm_path: location of the KenLM format n-gram language model
+        :param lm_path: location of the n-gram language model, either in ARPA text format or KenLM binary format
         :param skip_symbol_norm: don't normalize character prediction distribution to just symbol_set
         :param space_symbol: pseudo-word for spaces between words
         """
         super().__init__(symbol_set=symbol_set)
-        print(f"Creating n-gram language model, lm_path = {lm_path}")
         self.model = None
+        if not path.exists(lm_path):
+            print(f"ERROR: {lm_path} does not exist!")
+            return
+
         self.lm_path = lm_path
         self.skip_symbol_norm = skip_symbol_norm
-        try:
-            self.model = kenlm.LanguageModel(self.lm_path)
-        except BaseException:
-            raise InvalidLanguageModelException(
-                f"A valid model path must be provided for the KenLMLanguageModel.\nPath{self.lm_path} is not valid.")
+        self.model = kenlm.LanguageModel(self.lm_path)
         self.state = kenlm.State()
         self.state2 = kenlm.State()
-
         self.space_symbol = space_symbol
 
         # Create a parallel version of symbol_set that does any conversion required to bring plain characters into the n-gram's vocab
