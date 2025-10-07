@@ -36,7 +36,7 @@ Finally install other libraries needed by TextSlinger:
 ```
 pip install kenlm==0.1 --global-option="--max_order=12"
 pip install py-cpuinfo 
-pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate peft pytest wget
+pip install rbloom bitsandbytes requests nlpaug ipywidgets psutil datasets sentencepiece protobuf evaluate scikit-learn deepspeed accelerate peft pytest wget coverage
 ```
 
 ---
