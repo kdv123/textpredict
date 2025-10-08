@@ -24,7 +24,7 @@ conda install pytorch torchvision torchaudio pytorch-cuda cuda mpi4py -c pytorch
 ```
 If you don't need GPU support:
 ```
-conda install pytorch torchvision torchaudio pytorch-cuda cuda mpi4py -c pytorch -c nvidia
+conda install pytorch torchvision torchaudio mpi4py -c pytorch 
 ```
 For the byte tokenized LLM, we need to install the uniformers library. 
 Installing this library degrades the transformers library which we then upgrade afterwards:

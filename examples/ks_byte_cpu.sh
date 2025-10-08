@@ -11,4 +11,4 @@ MODEL_NAME=nllg/bygpt5-small-en
 PHRASES=comm_case_dev.txt
 wc -l -w ${PHRASES}
 
-../keystroke_savings.py --phrases ${PHRASES} --model-name ${MODEL_NAME} --byte --case-simple --nbest 5 --beam 2.0 --lower --strip
+../keystroke_savings.py --phrases ${PHRASES} --model-name ${MODEL_NAME} --byte --case-simple --nbest 5 --beam 2.0 --strip-symbols --predict-lower
